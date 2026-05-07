@@ -24,7 +24,7 @@ export default function AdminMaterialUploadPage() {
   const [branches, setBranches] = useState([]);
   const [intakes, setIntakes] = useState([]);
   const [batches, setBatches] = useState([]);
-  
+   
   // UI state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');

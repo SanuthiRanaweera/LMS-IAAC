@@ -95,6 +95,12 @@ export default function LoginPage() {
             </button>
           </form>
 
+          <div className="mt-4 text-center text-sm">
+            <Link to="/forgot-password" className="font-semibold text-sky-700 hover:underline">
+              Forgot password?
+            </Link>
+          </div>
+
           <div className="mt-8 text-center text-sm text-slate-500">Contact admin if you need access.</div>
         </div>
       </div>

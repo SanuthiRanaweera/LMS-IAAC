@@ -37,6 +37,10 @@ const StudentSchema = new Schema(
     programId: { type: String, trim: true, maxlength: 64, index: true },
 
     passwordHash: { type: String, required: true },
+
+    // Password reset (forgot password)
+    resetPasswordTokenHash: { type: String, trim: true, maxlength: 128, index: true },
+    resetPasswordTokenExpiresAt: { type: Date, index: true },
   },
   { timestamps: true }
 );

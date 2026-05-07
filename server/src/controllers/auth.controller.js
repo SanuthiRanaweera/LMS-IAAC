@@ -1,4 +1,6 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+import nodemailer from 'nodemailer';
 import { Student } from '../models/Student.js';
 import { Admin } from '../models/Admin.js';
 import { clearAuthCookie, setAuthCookie, signAuthToken } from '../middleware/auth.js';
@@ -25,6 +27,57 @@ function isValidEmail(email) {
 function normalizeId(value) {
   if (value == null) return '';
   return String(value);
+}
+
+function envBool(name) {
+  const v = process.env[name];
+  return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+}
+
+function sha256Hex(value) {
+  return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+function makeResetToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+function appBaseUrl() {
+  const v = process.env.APP_BASE_URL;
+  return typeof v === 'string' && v.trim() ? v.trim().replace(/\/$/, '') : '';
+}
+
+async function maybeSendPasswordResetEmail({ toEmail, resetUrl }) {
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT || 587);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  const from = process.env.SMTP_FROM;
+
+  // If SMTP is not configured, just log the URL.
+  if (!host || !from || !toEmail || !resetUrl) {
+    if (resetUrl) console.log(`[password-reset] ${toEmail || '(unknown)'} -> ${resetUrl}`);
+    return;
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: user && pass ? { user, pass } : undefined,
+    });
+
+    await transporter.sendMail({
+      from,
+      to: toEmail,
+      subject: 'Reset your IAAC Student Portal password',
+      text: `You requested a password reset.\n\nReset link (valid for 1 hour):\n${resetUrl}\n\nIf you did not request this, you can ignore this email.`,
+    });
+  } catch (err) {
+    console.log(`[password-reset] email send failed for ${toEmail}: ${err?.message || String(err)}`);
+    console.log(`[password-reset] fallback URL: ${resetUrl}`);
+  }
 }
 
 async function resolveInvite(intakeId, inviteToken) {
@@ -265,6 +318,81 @@ export async function loginStudent(req, res, next) {
     }
 
     return res.status(401).json({ message: 'Invalid credentials' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function forgotStudentPassword(req, res, next) {
+  try {
+    const { identifier } = req.body || {};
+    const id = safeTrim(identifier);
+    const normalizedEmail = normalizeEmail(id);
+
+    // Always respond 200 to avoid account enumeration.
+    if (!id) return res.json({ ok: true });
+
+    const student = await Student.findOne({
+      $or: [{ email: normalizedEmail }, { studentId: id }],
+    });
+
+    if (!student) {
+      return res.json({ ok: true });
+    }
+
+    const token = makeResetToken();
+    const tokenHash = sha256Hex(token);
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    student.resetPasswordTokenHash = tokenHash;
+    student.resetPasswordTokenExpiresAt = expiresAt;
+    await student.save();
+
+    const base = appBaseUrl();
+    const resetUrl = base ? `${base}/reset-password?token=${encodeURIComponent(token)}` : '';
+    await maybeSendPasswordResetEmail({ toEmail: student.email, resetUrl });
+
+    const includeToken = envBool('PASSWORD_RESET_RETURN_TOKEN') || process.env.NODE_ENV !== 'production';
+    if (includeToken) {
+      return res.json({ ok: true, token, resetUrl });
+    }
+
+    return res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function resetStudentPassword(req, res, next) {
+  try {
+    const { token, password } = req.body || {};
+    const safeToken = safeTrim(token);
+    const safePassword = safeTrim(password);
+
+    if (!safeToken) return res.status(400).json({ message: 'Reset token is required' });
+    if (!safePassword || safePassword.length < 8) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters' });
+    }
+
+    const tokenHash = sha256Hex(safeToken);
+    const student = await Student.findOne({
+      resetPasswordTokenHash: tokenHash,
+      resetPasswordTokenExpiresAt: { $gt: new Date() },
+    });
+
+    if (!student) {
+      return res.status(400).json({ message: 'Invalid or expired reset token' });
+    }
+
+    student.passwordHash = await bcrypt.hash(safePassword, 12);
+    student.resetPasswordTokenHash = undefined;
+    student.resetPasswordTokenExpiresAt = undefined;
+    await student.save();
+
+    // Auto sign-in after reset for better UX.
+    const authToken = signAuthToken({ sub: String(student._id), role: 'student' });
+    setAuthCookie(res, authToken);
+    return res.json({ student: toMePayload(student) });
   } catch (err) {
     next(err);
   }

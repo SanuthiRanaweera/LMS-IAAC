@@ -13,6 +13,7 @@ import AdminMaterialUploadPage from './admin/pages/AdminMaterialUploadPage.jsx';
 import AdminBranchesPage from './admin/pages/AdminBranchesPage.jsx';
 import AdminBranchIntakesPage from './admin/pages/AdminBranchIntakesPage.jsx';
 import AdminBranchBatchesPage from './admin/pages/AdminBranchBatchesPage.jsx';
+import AdminRecordingsPage from './admin/pages/AdminRecordingsPage.jsx';
 import StudentLayout from './layouts/StudentLayout.jsx';
 import LecturerLayout from './layouts/LecturerLayout.jsx';
 import CoursesPage from './pages/CoursesPage.jsx';
@@ -26,6 +27,8 @@ import RecordingsPage from './pages/RecordingsPage.jsx';
 import SchedulePage from './pages/SchedulePage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import RegisterPage from './pages/RegisterPage.jsx';
+import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
+import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
 import LecturerDashboardPage from './pages/lecturer/LecturerDashboardPage.jsx';
 import LecturerChangePasswordPage from './pages/lecturer/LecturerChangePasswordPage.jsx';
 import LecturerSchedulePage from './pages/lecturer/LecturerSchedulePage.jsx';
@@ -106,11 +109,21 @@ export default function App() {
           <Route path="content" element={<Navigate to="/admin" replace />} />
           <Route path="schedule" element={<AdminScheduleLecturePage />} />
           <Route path="materials/upload" element={<AdminMaterialUploadPage />} />
+          <Route
+            path="recordings"
+            element={
+              <RequireAdminRole allow="superadmin">
+                <AdminRecordingsPage />
+              </RequireAdminRole>
+            }
+          />
         </Route>
 
         {/* Student */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         {/* Lecturer */}
         <Route path="/lecturer/change-password" element={<LecturerChangePasswordPage />} />
