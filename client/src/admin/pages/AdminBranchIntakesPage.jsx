@@ -117,8 +117,16 @@ export default function AdminBranchIntakesPage() {
     const updated = branchesPayload.map((b) => {
       if (String(b?.id) !== String(branchId)) return b;
       const intakes = Array.isArray(b?.intakes) ? b.intakes : [];
-      const id = `intake-${Date.now().toString(36)}`;
-      return { ...(b || {}), intakes: [{ id, name, batches: [] }, ...intakes] };
+      const trimmedName = String(name || '').trim();
+      const id = trimmedName;
+      if (!trimmedName) {
+        throw new Error('Intake name is required');
+      }
+      const exists = intakes.some((i) => String(i?.id) === id || String(i?.name) === trimmedName);
+      if (exists) {
+        throw new Error('An intake with this name already exists');
+      }
+      return { ...(b || {}), intakes: [{ id, name: trimmedName, batches: [] }, ...intakes] };
     });
 
     await saveAcademics({ ...(payload || {}), branches: updated });
@@ -169,8 +177,8 @@ export default function AdminBranchIntakesPage() {
       const refreshed = await refresh();
       setItems(refreshed);
       setDialogOpen(false);
-    } catch {
-      setDialogError('Failed to save.');
+    } catch (err) {
+      setDialogError(err?.message || 'Failed to save.');
     } finally {
       setSaving(false);
     }
@@ -202,7 +210,7 @@ export default function AdminBranchIntakesPage() {
           columns={columns}
           empty={{
             title: 'No intakes found',
-            description: 'Add an intake to start creating batches for this branch.',
+            description: 'Add an intake to start creating diplomas for this branch.',
             addLabel: 'Add New',
           }}
           onAction={{
@@ -210,7 +218,7 @@ export default function AdminBranchIntakesPage() {
             onEdit: (row) => openRenameDialog(row),
             onDelete: async (row) => {
               if (!row?.id) return;
-              const ok = window.confirm(`Delete intake "${row?.name || ''}"? This will remove its batches too.`);
+              const ok = window.confirm(`Delete intake "${row?.name || ''}"? This will remove its diplomas too.`);
               if (!ok) return;
 
               setError('');

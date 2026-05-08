@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { apiGet, apiPost } from '../../api/http.js';
+import { useOutletContext } from 'react-router-dom';
+import { apiDelete, apiGet, apiPost } from '../../api/http.js';
 
 export default function AdminStudentsPage() {
+  const { admin } = useOutletContext();
+  const canDelete = String(admin?.role || '') === 'superadmin';
+
   const [q, setQ] = useState('');
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+
+  const [deletingId, setDeletingId] = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
 
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState(null);
@@ -26,6 +33,7 @@ export default function AdminStudentsPage() {
 
   const load = () => {
     setError(null);
+    setDeleteError(null);
     apiGet(`/api/admin/students?${queryString}`)
       .then((json) => setData(json))
       .catch((err) => setError(err));
@@ -58,6 +66,23 @@ export default function AdminStudentsPage() {
       })
       .catch((err) => setCreateError(err))
       .finally(() => setCreating(false));
+  };
+
+  const onDelete = (student) => {
+    if (!canDelete) return;
+    if (!student?.id) return;
+    setDeleteError(null);
+
+    const ok = window.confirm(
+      `Delete student "${student.fullName}" (${student.studentId || 'no id'})? This cannot be undone.`
+    );
+    if (!ok) return;
+
+    setDeletingId(student.id);
+    apiDelete(`/api/admin/students/${encodeURIComponent(student.id)}`)
+      .then(() => load())
+      .catch((err) => setDeleteError(err))
+      .finally(() => setDeletingId(null));
   };
 
   return (
@@ -169,6 +194,12 @@ export default function AdminStudentsPage() {
           <div className="mt-4 text-sm text-rose-700">Failed to load students.</div>
         ) : null}
 
+        {deleteError ? (
+          <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+            {deleteError.message || 'Failed to delete student.'}
+          </div>
+        ) : null}
+
         {!data ? (
           <div className="mt-4 text-sm text-slate-600">Loading…</div>
         ) : (
@@ -180,6 +211,7 @@ export default function AdminStudentsPage() {
                   <th className="py-2">Email</th>
                   <th className="py-2">Student ID</th>
                   <th className="py-2">Course</th>
+                  {canDelete ? <th className="py-2 text-right">Actions</th> : null}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -189,6 +221,18 @@ export default function AdminStudentsPage() {
                     <td className="py-3">{s.email}</td>
                     <td className="py-3">{s.studentId}</td>
                     <td className="py-3">{s.course || '—'}</td>
+                    {canDelete ? (
+                      <td className="py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => onDelete(s)}
+                          disabled={deletingId === s.id}
+                          className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                        >
+                          {deletingId === s.id ? 'Deleting…' : 'Delete'}
+                        </button>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>

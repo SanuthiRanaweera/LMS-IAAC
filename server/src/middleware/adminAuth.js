@@ -30,6 +30,7 @@ export function requireSuperAdmin(action) {
     'CREATE_STAFF_ADMIN',
     'EDIT_STAFF_ADMIN', 
     'DELETE_STAFF_ADMIN',
+    'DELETE_STUDENT',
     'EDIT_CONTENT',
     'DELETE_CONTENT',
     'VIEW_ANALYTICS',

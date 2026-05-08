@@ -3,6 +3,7 @@ import { requireAdminForAppDataKey, requireAdminRole, requirePermission } from '
 import {
   createStudentByAdmin,
   createStaffUser,
+  deleteStudentByAdmin,
   editStaffUser,
   deleteStaffUser,
   getAdminMetrics,
@@ -32,6 +33,7 @@ adminRouter.delete('/users/:id', requirePermission('DELETE_STAFF_ADMIN'), delete
 // Student management (both roles can view and create)
 adminRouter.get('/students', requirePermission('VIEW_STUDENTS'), listStudents);
 adminRouter.post('/students', requirePermission('CREATE_STUDENT'), createStudentByAdmin);
+adminRouter.delete('/students/:id', requirePermission('DELETE_STUDENT'), deleteStudentByAdmin);
 
 // App data management with enhanced permissions
 adminRouter.get('/app-data/keys', requireAdminRole('superadmin'), listAppDataKeys);

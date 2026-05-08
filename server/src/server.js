@@ -53,7 +53,9 @@ export function createServer() {
     cors({
       origin(origin, callback) {
         if (!origin) return callback(null, true);
-        if (envOrigins.length > 0) return callback(null, envOrigins.includes(origin));
+        if (envOrigins.length > 0) {
+          return callback(null, envOrigins.includes(origin) || isAllowedLocalDevOrigin(origin));
+        }
         return callback(null, isAllowedLocalDevOrigin(origin));
       },
       credentials: true,

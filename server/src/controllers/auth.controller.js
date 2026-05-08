@@ -117,8 +117,8 @@ async function resolveBranchEnrollment(branchId, intakeId, batchId) {
   const safeIntakeId = normalizeId(intakeId).trim();
   const safeBatchId = normalizeId(batchId).trim();
 
-  if (!safeBranchId || !safeIntakeId || !safeBatchId) {
-    return { error: 'Branch, intake, and batch are required' };
+  if (!safeBranchId || !safeIntakeId) {
+    return { error: 'Branch and intake are required' };
   }
 
   const payload = await getOrCreateAppDataPayload('academics', { branches: [] });
@@ -139,13 +139,16 @@ async function resolveBranchEnrollment(branchId, intakeId, batchId) {
   );
   if (!intake) return { error: 'Invalid registration link' };
 
-  const batches = Array.isArray(intake?.batches) ? intake.batches : [];
-  const batch = batches.find(
-    (b) => normalizeId(b?.id || b?._id || b?.key || b?.code || b?.name) === normalizedBatchId
-  );
-  if (!batch) return { error: 'Invalid registration link' };
+  if (safeBatchId) {
+    const batches = Array.isArray(intake?.batches) ? intake.batches : [];
+    const batch = batches.find(
+      (b) => normalizeId(b?.id || b?._id || b?.key || b?.code || b?.name) === normalizedBatchId
+    );
+    if (!batch) return { error: 'Invalid registration link' };
+    return { branchId: safeBranchId, intakeId: safeIntakeId, batchId: safeBatchId };
+  }
 
-  return { branchId: safeBranchId, intakeId: safeIntakeId, batchId: safeBatchId };
+  return { branchId: safeBranchId, intakeId: safeIntakeId };
 }
 
 function toMePayload(student) {
@@ -425,6 +428,86 @@ export async function getAuthMe(req, res, next) {
     if (!student) return res.status(401).json({ message: 'Unauthorized' });
 
     res.json(toMePayload(student));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateAuthMe(req, res, next) {
+  try {
+    const id = req.auth?.sub;
+    const role = req.auth?.role;
+    if (!id) return res.status(401).json({ message: 'Unauthorized' });
+
+    // For now only student self-profile update is supported.
+    if (role === 'lecturer') return res.status(403).json({ message: 'Forbidden' });
+
+    const student = await Student.findById(id);
+    if (!student) return res.status(401).json({ message: 'Unauthorized' });
+
+    const { email, phoneNumber } = req.body || {};
+
+    const update = {};
+
+    if (email !== undefined) {
+      const normalizedEmail = normalizeEmail(email);
+      if (!isValidEmail(normalizedEmail)) {
+        return res.status(400).json({ message: 'Valid email is required' });
+      }
+
+      const existing = await Student.findOne({ email: normalizedEmail, _id: { $ne: id } }).lean();
+      if (existing) return res.status(409).json({ message: 'Email already exists' });
+
+      update.email = normalizedEmail;
+    }
+
+    if (phoneNumber !== undefined) {
+      update.phoneNumber = safeTrim(phoneNumber);
+    }
+
+    if (Object.keys(update).length === 0) {
+      return res.json(toMePayload(student));
+    }
+
+    Object.assign(student, update);
+    await student.save();
+
+    return res.json(toMePayload(student));
+  } catch (err) {
+    if (err?.code === 11000) {
+      return res.status(409).json({ message: 'Email already exists' });
+    }
+    next(err);
+  }
+}
+
+export async function changeStudentPassword(req, res, next) {
+  try {
+    const id = req.auth?.sub;
+    const role = req.auth?.role;
+    if (!id) return res.status(401).json({ message: 'Unauthorized' });
+
+    // Students only
+    if (role === 'lecturer') return res.status(403).json({ message: 'Forbidden' });
+
+    const { oldPassword, newPassword } = req.body || {};
+    if (!isNonEmptyString(oldPassword)) {
+      return res.status(400).json({ message: 'Old password is required' });
+    }
+    if (!isNonEmptyString(newPassword) || newPassword.trim().length < 8) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters' });
+    }
+
+    const student = await Student.findById(id);
+    if (!student) return res.status(401).json({ message: 'Unauthorized' });
+
+    const ok = await bcrypt.compare(oldPassword, student.passwordHash);
+    if (!ok) return res.status(400).json({ message: 'Old password is incorrect' });
+
+    student.passwordHash = await bcrypt.hash(newPassword.trim(), 12);
+    await student.save();
+
+    return res.json({ ok: true });
   } catch (err) {
     next(err);
   }

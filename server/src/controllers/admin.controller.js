@@ -219,6 +219,29 @@ export async function createStudentByAdmin(req, res, next) {
   }
 }
 
+export async function deleteStudentByAdmin(req, res, next) {
+  try {
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ message: 'Student ID is required' });
+
+    const student = await Student.findById(id).lean();
+    if (!student) return res.status(404).json({ message: 'Student not found' });
+
+    await Student.findByIdAndDelete(id);
+
+    await logAdminAction(req.adminAuth?.id, 'DELETE_STUDENT', {
+      studentId: id,
+      studentEmail: student.email,
+      studentStudentId: student.studentId,
+      studentName: student.fullName,
+    });
+
+    return res.json({ message: 'Student account deleted successfully' });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function listAppDataKeys(req, res, next) {
   try {
     const keys = await AppData.find({}, { key: 1, _id: 0 }).sort({ key: 1 }).lean();

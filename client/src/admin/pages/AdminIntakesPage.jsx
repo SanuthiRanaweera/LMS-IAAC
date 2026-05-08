@@ -147,11 +147,19 @@ export default function AdminIntakesPage() {
         programs: programs.map((p) => {
           if (String(p?.id) !== String(programId)) return p;
           const intakes = Array.isArray(p?.intakes) ? p.intakes : [];
-          const id = `int-${Date.now().toString(36)}`;
+          const trimmedName = String(name || '').trim();
+          const id = trimmedName;
+          if (!trimmedName) {
+            throw new Error('Intake name is required');
+          }
+          const exists = intakes.some((i) => String(i?.id) === id || String(i?.name) === trimmedName);
+          if (exists) {
+            throw new Error('An intake with this name already exists');
+          }
           const inviteToken = generateInviteToken();
           return {
             ...(p || {}),
-            intakes: [{ id, name, inviteToken, subjects: [] }, ...intakes],
+            intakes: [{ id, name: trimmedName, inviteToken, subjects: [] }, ...intakes],
           };
         }),
       };
@@ -196,8 +204,8 @@ export default function AdminIntakesPage() {
       const refreshed = await fetchEntities('intakes', programId);
       setItems(refreshed);
       setDialogOpen(false);
-    } catch {
-      setDialogError('Failed to save.');
+    } catch (err) {
+      setDialogError(err?.message || 'Failed to save.');
     } finally {
       setSaving(false);
     }

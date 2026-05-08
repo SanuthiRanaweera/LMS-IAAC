@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { apiGet, apiPost } from '../api/http.js';
+import { apiPost } from '../api/http.js';
 import { PlaneTakeoff } from 'lucide-react';
 
 export default function RegisterPage() {
@@ -18,11 +18,6 @@ export default function RegisterPage() {
   const isLegacyInviteLink = Boolean(linkParams.intakeId && linkParams.inviteToken);
   const isBranchIntakeLink = Boolean(linkParams.branchId && linkParams.intakeId && !linkParams.inviteToken);
 
-  const [selectedBatchId, setSelectedBatchId] = useState('');
-  const [batchOptions, setBatchOptions] = useState([]);
-  const [batchLoading, setBatchLoading] = useState(false);
-  const [batchLoadError, setBatchLoadError] = useState(null);
-
   const [form, setForm] = useState({
     fullName: '', email: '', nic: '', course: '', studentId: '',
     whatsappNumber: '', phoneNumber: '', address: '',
@@ -30,51 +25,18 @@ export default function RegisterPage() {
     school: '', olResult: '', olMath: '', olEnglish: '', dob: '', gender: ''
   });
 
+  const [confirmPassword, setConfirmPassword] = useState('');
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
   const update = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
-  useEffect(() => {
-    let cancelled = false;
-
-    if (!isBranchIntakeLink) {
-      setBatchOptions([]);
-      setSelectedBatchId('');
-      setBatchLoading(false);
-      setBatchLoadError(null);
-      return;
-    }
-
-    setBatchLoading(true);
-    setBatchLoadError(null);
-    apiGet(
-      `/api/materials/branches/${encodeURIComponent(linkParams.branchId)}/intakes/${encodeURIComponent(linkParams.intakeId)}/batches`
-    )
-      .then((res) => {
-        if (cancelled) return;
-        const items = Array.isArray(res?.batches) ? res.batches : [];
-        setBatchOptions(items.map((b) => ({ label: b.name, value: b.id })));
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setBatchLoadError(err);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setBatchLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isBranchIntakeLink, linkParams.branchId, linkParams.intakeId]);
-
   const onSubmit = (e) => {
     e.preventDefault();
 
-    if (isBranchIntakeLink && !selectedBatchId) {
-      setError({ message: 'Please select your batch' });
+    if (String(form.password || '') !== String(confirmPassword || '')) {
+      setError({ message: 'Passwords do not match' });
       return;
     }
 
@@ -89,7 +51,6 @@ export default function RegisterPage() {
         ? {
             branchId: linkParams.branchId,
             intakeId: linkParams.intakeId,
-            batchId: selectedBatchId,
           }
         : {}),
     })
@@ -126,18 +87,6 @@ export default function RegisterPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input label="Branch" value={linkParams.branchId} required readOnly />
                   <Input label="Intake" value={linkParams.intakeId} required readOnly />
-                  <div className="md:col-span-2">
-                    <Select
-                      label={batchLoading ? 'Batch (loading...)' : 'Batch'}
-                      value={selectedBatchId}
-                      onChange={(e) => setSelectedBatchId(e.target.value)}
-                      options={batchOptions}
-                      required
-                    />
-                    {batchLoadError?.message ? (
-                      <p className="mt-2 text-sm text-red-600">{batchLoadError.message}</p>
-                    ) : null}
-                  </div>
                 </div>
               </div>
             )}
@@ -152,6 +101,8 @@ export default function RegisterPage() {
                 <Select label="Gender" value={form.gender} onChange={update('gender')} options={['Male', 'Female', 'Other']} required />
                 <Input label="NIC / Passport" value={form.nic} onChange={update('nic')} />
                 <Input label="WhatsApp Number" value={form.whatsappNumber} onChange={update('whatsappNumber')} />
+                <Input label="Phone Number" value={form.phoneNumber} onChange={update('phoneNumber')} />
+                <Input label="Address" value={form.address} onChange={update('address')} />
               </div>
             </div>
 
@@ -184,7 +135,16 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            <Input label="Create Password" type="password" value={form.password} onChange={update('password')} required />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input label="Create Password" type="password" value={form.password} onChange={update('password')} required />
+              <Input
+                label="Confirm Password"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+              />
+            </div>
 
             {error?.message ? (
               <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

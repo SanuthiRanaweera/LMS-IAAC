@@ -44,7 +44,7 @@ export default function AdminBranchBatchesPage() {
         if (!cancelled) setItems(list);
       })
       .catch(() => {
-        if (!cancelled) setError('Failed to load batches.');
+        if (!cancelled) setError('Failed to load diplomas.');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -170,7 +170,7 @@ export default function AdminBranchBatchesPage() {
           { label: 'Branches', to: '/admin/branches' },
           { label: branchName, to: `/admin/branches/${branchId}/intakes` },
           { label: intakeName },
-          { label: 'Batches' },
+          { label: 'Diplomas' },
         ]}
       />
 
@@ -184,12 +184,12 @@ export default function AdminBranchBatchesPage() {
         </div>
       ) : (
         <EntityTable
-          title={`Batches — ${branchName} / ${intakeName}`}
+          title={`Diplomas — ${branchName} / ${intakeName}`}
           data={items}
           columns={columns}
           empty={{
-            title: 'No batches found',
-            description: 'Add a batch so admins can upload materials for that batch.',
+            title: 'No diplomas found',
+            description: 'Add a diploma so admins can upload materials for that diploma.',
             addLabel: 'Add New',
           }}
           onAction={{
@@ -201,8 +201,8 @@ export default function AdminBranchBatchesPage() {
 
       <EntityNameDialog
         open={dialogOpen}
-        title={dialogMode === 'edit' ? 'Rename batch' : 'Add batch'}
-        label="Batch name"
+        title={dialogMode === 'edit' ? 'Rename diploma' : 'Add diploma'}
+        label="Diploma name"
         initialValue={dialogInitialValue}
         confirmLabel={dialogMode === 'edit' ? 'Update' : 'Create'}
         loading={saving}

@@ -78,8 +78,28 @@ export class ApiError extends Error {
 }
 
 async function readErrorMessage(res) {
+  const contentType = String(res.headers.get('content-type') || '').toLowerCase();
+  if (contentType.includes('application/json')) {
+    const cloned = res.clone();
+    try {
+      const json = await res.json();
+      const msg =
+        (json && typeof json === 'object' && (json.message || json.error)) ||
+        (typeof json === 'string' ? json : null);
+      if (msg) return String(msg);
+      return JSON.stringify(json);
+    } catch {
+      const text = await cloned.text();
+      return text || `Request failed: ${res.status}`;
+    }
+  }
+
   const text = await res.text();
   return text || `Request failed: ${res.status}`;
+}
+
+function networkErrorMessage(baseUrl) {
+  return `Can't connect to the server (${baseUrl}). Please make sure the backend is running and try again.`;
 }
 
 export async function apiGet(path) {
@@ -88,7 +108,7 @@ export async function apiGet(path) {
   try {
     res = await fetch(`${baseUrl}${path}`, { credentials: 'include', cache: 'no-store' });
   } catch {
-    throw new ApiError('Network error', 0);
+    throw new ApiError(networkErrorMessage(baseUrl), 0);
   }
   if (!res.ok) throw new ApiError(await readErrorMessage(res), res.status);
   return res.json();
@@ -105,7 +125,7 @@ export async function apiPost(path, body) {
       body: JSON.stringify(body ?? {}),
     });
   } catch {
-    throw new ApiError('Network error', 0);
+    throw new ApiError(networkErrorMessage(baseUrl), 0);
   }
   if (!res.ok) throw new ApiError(await readErrorMessage(res), res.status);
   return res.json();
@@ -122,7 +142,7 @@ export async function apiPut(path, body) {
       body: JSON.stringify(body ?? {}),
     });
   } catch {
-    throw new ApiError('Network error', 0);
+    throw new ApiError(networkErrorMessage(baseUrl), 0);
   }
   if (!res.ok) throw new ApiError(await readErrorMessage(res), res.status);
   return res.json();
@@ -139,7 +159,7 @@ export async function apiPatch(path, body) {
       body: JSON.stringify(body ?? {}),
     });
   } catch {
-    throw new ApiError('Network error', 0);
+    throw new ApiError(networkErrorMessage(baseUrl), 0);
   }
   if (!res.ok) throw new ApiError(await readErrorMessage(res), res.status);
   return res.json();
@@ -154,7 +174,7 @@ export async function apiDelete(path) {
       credentials: 'include',
     });
   } catch {
-    throw new ApiError('Network error', 0);
+    throw new ApiError(networkErrorMessage(baseUrl), 0);
   }
   if (!res.ok) throw new ApiError(await readErrorMessage(res), res.status);
   return res.text(); // DELETE endpoints typically return text
