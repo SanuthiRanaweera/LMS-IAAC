@@ -45,6 +45,13 @@ export function requireLecturer(req, res, next) {
   return next();
 }
 
+export function requireStudent(req, res, next) {
+  if (req.auth?.role !== 'student') {
+    return res.status(403).json({ message: 'Student access required' });
+  }
+  return next();
+}
+
 export function setAuthCookie(res, token) {
   const isProd = process.env.NODE_ENV === 'production';
   res.cookie(COOKIE_NAME, token, {
@@ -65,3 +72,4 @@ export function clearAuthCookie(res) {
     path: '/',
   });
 }
+

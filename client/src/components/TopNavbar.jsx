@@ -14,6 +14,7 @@ const NAV_LINKS = [
   { label: 'Knowledge Hub', icon: Library, to: '/knowledge-hub' },
   { label: 'Class Schedule', icon: Calendar, to: '/schedule' },
   { label: 'Recordings', icon: Video, to: '/recordings' },
+  { label: 'My Feedback', icon: Bell, to: '/feedback' },
 ];
 
 export default function TopNavbar({ student, onLogout }) {

@@ -17,6 +17,7 @@ const NAV = [
   { label: 'Class Schedule', to: '/admin/schedule', icon: Calendar },
   { label: 'Recordings', to: '/admin/recordings', icon: Video, superAdminOnly: true },
   { label: 'Knowledge Hub', to: '/admin/knowledge-hub', icon: Library, superAdminOnly: true },
+  { label: 'Feedback', to: '/admin/feedback', icon: Library, superAdminOnly: true },
 ];
 
 export default function AdminSidebar({ admin }) {

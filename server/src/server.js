@@ -20,6 +20,9 @@ import materialsRouter from './routes/materials.routes.js';
 import { scheduleRouter, scheduleAdminRouter } from './routes/schedule.routes.js';
 import { recordingsRouter, recordingsAdminRouter } from './routes/recordings.routes.js';
 import { knowledgeHubRouter, knowledgeHubAdminRouter } from './routes/knowledgehub.routes.js';
+import { feedbackRouter } from './routes/feedback.routes.js';
+import { adminFeedbackRouter } from './routes/adminFeedback.routes.js';
+import { lecturersRouter } from './routes/lecturers.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -79,6 +82,9 @@ export function createServer() {
   app.use('/api/admin/recordings', requireAdmin, recordingsAdminRouter);
   app.use('/api/admin/knowledge-hub', requireAdmin, knowledgeHubAdminRouter);
 
+  // Weekly feedback module (superadmin only on admin side)
+  app.use('/api/admin/feedback', adminFeedbackRouter);
+
   // Generic hierarchical management (superadmin only for management)
   app.use('/api/entities', requireAdmin, requireAdminRole('superadmin'), entitiesRouter);
 
@@ -89,6 +95,10 @@ export function createServer() {
   app.use('/api/schedule', scheduleRouter);
   app.use('/api/recordings', recordingsRouter);
   app.use('/api/knowledge-hub', knowledgeHubRouter);
+
+  // Lecturers directory + feedback endpoints (student/lecturer)
+  app.use('/api/lecturers', lecturersRouter);
+  app.use('/api/feedback', feedbackRouter);
 
   app.use('/api', requireAuth, lmsRouter);
 

@@ -95,4 +95,10 @@ export const DEFAULT_LMS_DATA = {
     // Legacy faculty structure (keep for backward compatibility)
     faculties: [],
   },
+
+  // Weekly feedback moderation settings.
+  // Super Admin can manage this list via the Feedback module.
+  feedbackBadWords: {
+    words: [],
+  },
 };

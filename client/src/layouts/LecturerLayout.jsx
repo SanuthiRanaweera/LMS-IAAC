@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { apiGet, apiPost } from '../api/http.js';
-import { LayoutDashboard, Calendar, Library, Video, LogOut } from 'lucide-react';
+import { LayoutDashboard, Calendar, Library, Video, LogOut, Bell } from 'lucide-react';
 import logo from '../image/logo.png';
 
 const NAV_LINKS = [
@@ -9,6 +9,7 @@ const NAV_LINKS = [
   { label: 'Schedule', icon: Calendar, to: '/lecturer/schedule' },
   { label: 'Recordings', icon: Video, to: '/lecturer/recordings' },
   { label: 'Knowledge Hub', icon: Library, to: '/lecturer/knowledge-hub' },
+  { label: 'Feedback Reports', icon: Bell, to: '/lecturer/feedback-reports' },
 ];
 
 export default function LecturerLayout() {

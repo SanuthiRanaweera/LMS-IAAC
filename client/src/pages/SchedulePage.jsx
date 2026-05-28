@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Calendar, Clock, MapPin, User } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { apiGet } from '../api/http.js';
 
 export default function SchedulePage() {
@@ -33,7 +34,19 @@ export default function SchedulePage() {
                 <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{s.date}</span>
                 <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{s.startTime} – {s.endTime}</span>
                 <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{s.room}</span>
-                {s.lecturerName && <span className="flex items-center gap-1"><User className="h-3 w-3" />{s.lecturerName}</span>}
+                {s.lecturerName ? (
+                  s.lecturerId ? (
+                    <Link
+                      to={`/lecturers/${encodeURIComponent(s.lecturerId)}`}
+                      className="flex items-center gap-1 hover:text-slate-700"
+                    >
+                      <User className="h-3 w-3" />
+                      <span className="underline decoration-slate-300 underline-offset-2">{s.lecturerName}</span>
+                    </Link>
+                  ) : (
+                    <span className="flex items-center gap-1"><User className="h-3 w-3" />{s.lecturerName}</span>
+                  )
+                ) : null}
               </div>
               {s.notes && <p className="mt-2 text-xs text-slate-600 italic">{s.notes}</p>}
             </div>
@@ -43,3 +56,4 @@ export default function SchedulePage() {
     </div>
   );
 }
+

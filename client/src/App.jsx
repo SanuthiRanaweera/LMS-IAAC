@@ -34,6 +34,11 @@ import LecturerChangePasswordPage from './pages/lecturer/LecturerChangePasswordP
 import LecturerSchedulePage from './pages/lecturer/LecturerSchedulePage.jsx';
 import LecturerRecordingsPage from './pages/lecturer/LecturerRecordingsPage.jsx';
 import LecturerKnowledgeHubPage from './pages/lecturer/LecturerKnowledgeHubPage.jsx';
+import LecturerFeedbackReportsPage from './pages/lecturer/LecturerFeedbackReportsPage.jsx';
+import LecturerProfilePage from './pages/LecturerProfilePage.jsx';
+import MyFeedbackHistoryPage from './pages/MyFeedbackHistoryPage.jsx';
+import AdminFeedbackDashboardPage from './admin/pages/AdminFeedbackDashboardPage.jsx';
+import AdminFeedbackModerationLogPage from './admin/pages/AdminFeedbackModerationLogPage.jsx';
 
 export default function App() {
   return (
@@ -117,6 +122,22 @@ export default function App() {
               </RequireAdminRole>
             }
           />
+          <Route
+            path="feedback"
+            element={
+              <RequireAdminRole allow="superadmin">
+                <AdminFeedbackDashboardPage />
+              </RequireAdminRole>
+            }
+          />
+          <Route
+            path="feedback/moderation"
+            element={
+              <RequireAdminRole allow="superadmin">
+                <AdminFeedbackModerationLogPage />
+              </RequireAdminRole>
+            }
+          />
         </Route>
 
         {/* Student */}
@@ -133,6 +154,7 @@ export default function App() {
           <Route path="schedule" element={<LecturerSchedulePage />} />
           <Route path="recordings" element={<LecturerRecordingsPage />} />
           <Route path="knowledge-hub" element={<LecturerKnowledgeHubPage />} />
+          <Route path="feedback-reports" element={<LecturerFeedbackReportsPage />} />
           <Route path="*" element={<Navigate to="/lecturer/dashboard" replace />} />
         </Route>
 
@@ -147,6 +169,8 @@ export default function App() {
           <Route path="policy" element={<PolicyPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="help" element={<HelpDeskPage />} />
+          <Route path="feedback" element={<MyFeedbackHistoryPage />} />
+          <Route path="lecturers/:lecturerId" element={<LecturerProfilePage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>
