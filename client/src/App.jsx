@@ -10,6 +10,7 @@ import AdminProgramsPage from './admin/pages/AdminProgramsPage.jsx';
 import AdminIntakesPage from './admin/pages/AdminIntakesPage.jsx';
 import AdminBatchStudentsPage from './admin/pages/AdminBatchStudentsPage.jsx';
 import AdminMaterialUploadPage from './admin/pages/AdminMaterialUploadPage.jsx';
+import AdminKnowledgeHubPage from './admin/pages/AdminKnowledgeHubPage.jsx';
 import AdminBranchesPage from './admin/pages/AdminBranchesPage.jsx';
 import AdminBranchIntakesPage from './admin/pages/AdminBranchIntakesPage.jsx';
 import AdminBranchBatchesPage from './admin/pages/AdminBranchBatchesPage.jsx';
@@ -114,6 +115,14 @@ export default function App() {
           <Route path="content" element={<Navigate to="/admin" replace />} />
           <Route path="schedule" element={<AdminScheduleLecturePage />} />
           <Route path="materials/upload" element={<AdminMaterialUploadPage />} />
+          <Route
+            path="knowledge-hub"
+            element={
+              <RequireAdminRole allow="superadmin">
+                <AdminKnowledgeHubPage />
+              </RequireAdminRole>
+            }
+          />
           <Route
             path="recordings"
             element={

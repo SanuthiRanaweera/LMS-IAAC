@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FileText, Link as LinkIcon, Video, StickyNote, Download, ExternalLink } from 'lucide-react';
+import { FileText, Link as LinkIcon, Video, StickyNote, Download, ExternalLink, Image as ImageIcon } from 'lucide-react';
 import { apiGet } from '../api/http.js';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -9,15 +9,22 @@ const TYPE_ICON = {
   link: LinkIcon,
   video: Video,
   note: StickyNote,
+  gallery: ImageIcon,
 };
 
-const TYPE_LABEL = { file: 'File', link: 'Link', video: 'Video', note: 'Note' };
+const TYPE_LABEL = { file: 'File', link: 'Link', video: 'Video', note: 'Note', gallery: 'Gallery' };
 const TYPE_COLOR = {
   file:  'bg-sky-50 text-sky-600',
   link:  'bg-purple-50 text-purple-600',
   video: 'bg-rose-50 text-rose-600',
   note:  'bg-amber-50 text-amber-600',
+  gallery: 'bg-emerald-50 text-emerald-600',
 };
+
+function mediaUrl(value) {
+  if (!value) return '';
+  return `${API_BASE}/${String(value).replace(/^\/+/, '')}`;
+}
 
 export default function KnowledgeHubPage() {
   const [items, setItems]   = useState([]);
@@ -86,6 +93,16 @@ export default function KnowledgeHubPage() {
                       >
                         <Download size={12} />{item.fileName || 'Download'}
                       </a>
+                    )}
+
+                    {item.resourceType === 'gallery' && Array.isArray(item.imagePaths) && item.imagePaths.length > 0 && (
+                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {item.imagePaths.slice(0, 6).map((imagePath, index) => (
+                          <a key={`${item.id}-${index}`} href={mediaUrl(imagePath)} target="_blank" rel="noreferrer" className="group block overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                            <img src={mediaUrl(imagePath)} alt={item.imageNames?.[index] || `${item.title} ${index + 1}`} className="h-28 w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]" />
+                          </a>
+                        ))}
+                      </div>
                     )}
 
                     <p className="mt-2 text-[10px] text-slate-400">Added by {item.addedByName}</p>

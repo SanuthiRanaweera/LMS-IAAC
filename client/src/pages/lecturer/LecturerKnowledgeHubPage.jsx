@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { FileText, Link as LinkIcon, Video, StickyNote, Plus, Trash2, X, Upload } from 'lucide-react';
+import { FileText, Link as LinkIcon, Video, StickyNote, Plus, Trash2, X, Upload, Image as ImageIcon } from 'lucide-react';
 import { apiGet, apiDelete } from '../../api/http.js';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
-const TYPE_ICON  = { file: FileText, link: LinkIcon, video: Video, note: StickyNote };
-const TYPE_COLOR = { file: 'bg-sky-50 text-sky-600', link: 'bg-purple-50 text-purple-600', video: 'bg-rose-50 text-rose-600', note: 'bg-amber-50 text-amber-600' };
+const TYPE_ICON  = { file: FileText, link: LinkIcon, video: Video, note: StickyNote, gallery: ImageIcon };
+const TYPE_COLOR = { file: 'bg-sky-50 text-sky-600', link: 'bg-purple-50 text-purple-600', video: 'bg-rose-50 text-rose-600', note: 'bg-amber-50 text-amber-600', gallery: 'bg-emerald-50 text-emerald-600' };
+
+function mediaUrl(value) {
+  if (!value) return '';
+  return `${API_BASE}/${String(value).replace(/^\/+/, '')}`;
+}
 
 const emptyForm = { resourceType: 'file', title: '', description: '', contentUrl: '', textContent: '' };
 
@@ -133,15 +138,29 @@ export default function LecturerKnowledgeHubPage() {
               const Icon = TYPE_ICON[item.resourceType] || FileText;
               const color = TYPE_COLOR[item.resourceType] || 'bg-slate-50 text-slate-600';
               return (
-                <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${color}`}><Icon size={16} /></div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-900 truncate">{item.title}</p>
-                      <p className="text-[10px] text-slate-400 capitalize">{item.resourceType} • {new Date(item.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${color}`}><Icon size={16} /></div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-900 truncate">{item.title}</p>
+                        <p className="text-[10px] text-slate-400 capitalize">{item.resourceType} • {new Date(item.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                      </div>
                     </div>
+                    <button onClick={() => onDelete(item.id)} className="h-8 w-8 flex items-center justify-center rounded-lg text-rose-500 hover:bg-rose-100"><Trash2 size={14} /></button>
                   </div>
-                  <button onClick={() => onDelete(item.id)} className="h-8 w-8 flex items-center justify-center rounded-lg text-rose-500 hover:bg-rose-100"><Trash2 size={14} /></button>
+
+                  {item.description && <p className="mt-2 text-xs text-slate-600">{item.description}</p>}
+
+                  {item.resourceType === 'gallery' && Array.isArray(item.imagePaths) && item.imagePaths.length > 0 && (
+                    <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
+                      {item.imagePaths.slice(0, 4).map((imagePath, index) => (
+                        <a key={`${item.id}-${index}`} href={mediaUrl(imagePath)} target="_blank" rel="noreferrer" className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                          <img src={mediaUrl(imagePath)} alt={item.imageNames?.[index] || `${item.title} ${index + 1}`} className="h-20 w-full object-cover" />
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}

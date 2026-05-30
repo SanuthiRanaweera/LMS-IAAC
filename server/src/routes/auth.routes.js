@@ -7,14 +7,24 @@ import {
 	updateAuthMe,
 	loginStudent,
 	logoutStudent,
-	registerStudent,
+	sendRegistrationOtp,
+	verifyAndRegisterStudent,
+	registerWithoutOtp,
+	verifyMailTransport,
 	resetStudentPassword,
 } from '../controllers/auth.controller.js';
 import { requireAuth } from '../middleware/auth.js';
 
 export const authRouter = Router();
 
-authRouter.post('/register', registerStudent);
+authRouter.post('/send-otp', sendRegistrationOtp);
+authRouter.post('/verify-and-register', verifyAndRegisterStudent);
+// POST /register uses no-OTP flow when DISABLE_OTP=true in env (temporary)
+const registerHandler = (process.env.DISABLE_OTP === '1' || String(process.env.DISABLE_OTP || '').toLowerCase() === 'true')
+	? registerWithoutOtp
+	: verifyAndRegisterStudent;
+authRouter.post('/register', registerHandler);
+authRouter.get('/mail-status', verifyMailTransport);
 authRouter.post('/login', loginStudent);
 authRouter.post('/logout', logoutStudent);
 authRouter.post('/forgot-password', forgotStudentPassword);

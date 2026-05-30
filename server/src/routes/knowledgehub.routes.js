@@ -38,5 +38,13 @@ knowledgeHubRouter.delete('/lecturer/:id', requireAuth, requireLecturer, lecture
 
 // ─── Admin routes (protected by requireAdmin on server.js level) ──────────────
 knowledgeHubAdminRouter.get('/', adminListHubItems);
-knowledgeHubAdminRouter.post('/', requireAdminRole(['superadmin']), hubUpload.single('file'), adminAddHubItem);
+knowledgeHubAdminRouter.post(
+  '/',
+  requireAdminRole(['superadmin']),
+  hubUpload.fields([
+    { name: 'file', maxCount: 1 },
+    { name: 'images', maxCount: 6 },
+  ]),
+  adminAddHubItem
+);
 knowledgeHubAdminRouter.delete('/:id', requireAdminRole(['superadmin']), adminDeleteHubItem);

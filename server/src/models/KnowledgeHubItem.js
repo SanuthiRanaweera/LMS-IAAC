@@ -8,12 +8,12 @@ const KnowledgeHubItemSchema = new Schema(
     intakeId: { type: String, required: true, trim: true, maxlength: 64, index: true },
     batchId:  { type: String, required: true, trim: true, maxlength: 64, index: true },
 
-    // file | link | video | note
+    // file | link | video | note | gallery
     resourceType: {
       type: String,
       required: true,
       trim: true,
-      enum: ['file', 'link', 'video', 'note'],
+      enum: ['file', 'link', 'video', 'note', 'gallery'],
     },
 
     title:       { type: String, required: true, trim: true, maxlength: 300 },
@@ -24,6 +24,10 @@ const KnowledgeHubItemSchema = new Schema(
     fileName:  { type: String, trim: true, maxlength: 255, default: '' },
     fileSize:  { type: Number, default: 0 },
     fileMime:  { type: String, trim: true, maxlength: 100, default: '' },
+
+    // gallery images
+    imagePaths: { type: [String], default: [] },
+    imageNames: { type: [String], default: [] },
 
     // external link or video link
     contentUrl: { type: String, trim: true, maxlength: 1000, default: '' },

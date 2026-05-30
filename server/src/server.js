@@ -67,6 +67,7 @@ export function createServer() {
   app.use(morgan('dev'));
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
+  app.use('/uploads', express.static(path.resolve(__dirname, '..', 'uploads')));
 
   app.get('/', (req, res) => {
     res.json({ name: 'lms-api', status: 'ok' });
