@@ -8,6 +8,7 @@ import {
   deleteStaffUser,
   getAdminMetrics,
   getAppDataByKey,
+  getStudentById,
   listAdminUsers,
   listAppDataKeys,
   listStudents,
@@ -32,6 +33,7 @@ adminRouter.delete('/users/:id', requirePermission('DELETE_STAFF_ADMIN'), delete
 
 // Student management (both roles can view and create)
 adminRouter.get('/students', requirePermission('VIEW_STUDENTS'), listStudents);
+adminRouter.get('/students/:id', requirePermission('VIEW_STUDENTS'), getStudentById);
 adminRouter.post('/students', requirePermission('CREATE_STUDENT'), createStudentByAdmin);
 adminRouter.delete('/students/:id', requirePermission('DELETE_STUDENT'), deleteStudentByAdmin);
 

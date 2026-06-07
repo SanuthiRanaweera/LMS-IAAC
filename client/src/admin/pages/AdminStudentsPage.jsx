@@ -12,6 +12,9 @@ export default function AdminStudentsPage() {
 
   const [deletingId, setDeletingId] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
+  const [detailStudent, setDetailStudent] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState(null);
 
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState(null);
@@ -259,7 +262,7 @@ export default function AdminStudentsPage() {
                   <th className="py-2">Email</th>
                   <th className="py-2">Student ID</th>
                   <th className="py-2">Course</th>
-                  {canDelete ? <th className="py-2 text-right">Actions</th> : null}
+                  <th className="py-2 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -269,8 +272,22 @@ export default function AdminStudentsPage() {
                     <td className="py-3">{s.email}</td>
                     <td className="py-3">{s.studentId}</td>
                     <td className="py-3">{s.course || '—'}</td>
-                    {canDelete ? (
-                      <td className="py-3 text-right">
+                    <td className="py-3 text-right space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDetailError(null);
+                          setDetailLoading(true);
+                          apiGet(`/api/admin/students/${encodeURIComponent(s.id)}`)
+                            .then((json) => setDetailStudent(json.student))
+                            .catch((err) => setDetailError(err))
+                            .finally(() => setDetailLoading(false));
+                        }}
+                        className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        View
+                      </button>
+                      {canDelete ? (
                         <button
                           type="button"
                           onClick={() => onDelete(s)}
@@ -279,8 +296,8 @@ export default function AdminStudentsPage() {
                         >
                           {deletingId === s.id ? 'Deleting…' : 'Delete'}
                         </button>
-                      </td>
-                    ) : null}
+                      ) : null}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -288,6 +305,40 @@ export default function AdminStudentsPage() {
           </div>
         )}
       </section>
+
+      {/* Detail modal */}
+      {detailStudent || detailLoading || detailError ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-6">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setDetailStudent(null)} />
+          <div className="relative w-full max-w-2xl rounded-lg bg-white p-6 shadow-lg">
+            <div className="flex items-start justify-between">
+              <h3 className="text-lg font-bold">Student details</h3>
+              <button className="text-sm text-slate-500" onClick={() => setDetailStudent(null)}>Close</button>
+            </div>
+
+            {detailLoading ? (
+              <div className="mt-4 text-sm text-slate-600">Loading…</div>
+            ) : detailError ? (
+              <div className="mt-4 text-sm text-rose-700">{detailError.message || 'Failed to load details.'}</div>
+            ) : detailStudent ? (
+              <div className="mt-4 grid gap-2">
+                <div><strong>Name:</strong> {detailStudent.fullName}</div>
+                <div><strong>Email:</strong> {detailStudent.email}</div>
+                <div><strong>Student ID:</strong> {detailStudent.studentId}</div>
+                <div><strong>NIC:</strong> {detailStudent.nic || '—'}</div>
+                <div><strong>Course:</strong> {detailStudent.course || '—'}</div>
+                <div><strong>Phone:</strong> {detailStudent.phoneNumber || '—'}</div>
+                <div><strong>WhatsApp:</strong> {detailStudent.whatsappNumber || '—'}</div>
+                <div><strong>Address:</strong> {detailStudent.address || '—'}</div>
+                <div><strong>Guardian:</strong> {detailStudent.guardianName || '—'} ({detailStudent.guardianPhoneNumber || '—'})</div>
+                <div><strong>Branch / Intake / Batch:</strong> {detailStudent.branchId || detailStudent.intakeId || detailStudent.batchId ? `${detailStudent.branchId || '—'} / ${detailStudent.intakeId || '—'} / ${detailStudent.batchId || '—'}` : '—'}</div>
+                <div><strong>Created By:</strong> {detailStudent.createdBy}</div>
+                <div><strong>Registered At:</strong> {new Date(detailStudent.createdAt).toLocaleString()}</div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

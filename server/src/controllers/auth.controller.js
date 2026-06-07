@@ -331,6 +331,7 @@ export async function verifyAndRegisterStudent(req, res, next) {
       guardianPhoneNumber: safeTrim(studentData.guardianPhoneNumber),
       ...(association ? association : {}),
       passwordHash,
+      createdBy: 'self',
     });
 
     await Otp.deleteOne({ email: normalizedEmail });
@@ -409,6 +410,7 @@ export async function registerWithoutOtp(req, res, next) {
       guardianPhoneNumber: safeTrim(studentData.guardianPhoneNumber),
       ...(association ? association : {}),
       passwordHash,
+      createdBy: 'self',
     });
 
     const token = signAuthToken({ sub: String(created._id) });

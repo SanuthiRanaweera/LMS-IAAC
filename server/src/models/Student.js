@@ -41,6 +41,8 @@ const StudentSchema = new Schema(
     // Password reset (forgot password)
     resetPasswordTokenHash: { type: String, trim: true, maxlength: 128, index: true },
     resetPasswordTokenExpiresAt: { type: Date, index: true },
+    // Source of creation: 'self' = user registered, 'admin' = created by admin
+    createdBy: { type: String, trim: true, maxlength: 16, default: 'self', index: true },
   },
   { timestamps: true }
 );

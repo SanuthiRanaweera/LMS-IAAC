@@ -137,6 +137,8 @@ export async function listStudents(req, res, next) {
   try {
     const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));
     const q = safeTrim(req.query.q);
+    const source = safeTrim(req.query.source); // 'self' or 'admin'
+    const exportType = String(req.query.export || '').toLowerCase(); // 'csv'
     const intakeId = safeTrim(req.query.intakeId);
 
     const filter = {
@@ -150,6 +152,7 @@ export async function listStudents(req, res, next) {
           }
         : {}),
       ...(intakeId ? { intakeId } : {}),
+      ...(source ? { createdBy: source } : {}),
     };
 
     const items = await Student.find(filter)
@@ -157,7 +160,81 @@ export async function listStudents(req, res, next) {
       .limit(limit)
       .lean();
 
+    if (exportType === 'csv') {
+      // build CSV
+      const cols = [
+        'id',
+        'fullName',
+        'email',
+        'studentId',
+        'course',
+        'phoneNumber',
+        'whatsappNumber',
+        'branchId',
+        'intakeId',
+        'batchId',
+        'createdAt',
+        'createdBy',
+      ];
+
+      const header = cols.join(',') + '\n';
+      const rows = items.map((s) =>
+        cols
+          .map((c) => {
+            const v = s[c] === undefined || s[c] === null ? '' : String(s[c]);
+            // Escape double quotes
+            if (v.includes(',') || v.includes('"') || v.includes('\n')) {
+              return '"' + v.replace(/"/g, '""') + '"';
+            }
+            return v;
+          })
+          .join(',')
+      );
+
+      const csv = header + rows.join('\n');
+      const filename = `students-${new Date().toISOString().slice(0,10)}.csv`;
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      return res.send(csv);
+    }
+
     res.json({ students: items.map(toStudentListItem) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getStudentById(req, res, next) {
+  try {
+    const id = String(req.params?.id || '').trim();
+    if (!id) return res.status(400).json({ message: 'Student id is required' });
+
+    const student = await Student.findById(id).lean();
+    if (!student) return res.status(404).json({ message: 'Student not found' });
+
+    const payload = {
+      id: String(student._id),
+      fullName: student.fullName,
+      email: student.email,
+      studentId: student.studentId,
+      nic: student.nic,
+      course: student.course,
+      whatsappNumber: student.whatsappNumber,
+      phoneNumber: student.phoneNumber,
+      address: student.address,
+      guardianName: student.guardianName,
+      guardianPhoneNumber: student.guardianPhoneNumber,
+      branchId: student.branchId,
+      intakeId: student.intakeId,
+      batchId: student.batchId,
+      facultyId: student.facultyId,
+      programId: student.programId,
+      createdBy: student.createdBy,
+      createdAt: student.createdAt,
+      updatedAt: student.updatedAt,
+    };
+
+    res.json({ student: payload });
   } catch (err) {
     next(err);
   }
@@ -208,6 +285,7 @@ export async function createStudentByAdmin(req, res, next) {
       guardianName: safeTrim(guardianName),
       guardianPhoneNumber: safeTrim(guardianPhoneNumber),
       passwordHash,
+      createdBy: 'admin',
     });
 
     res.status(201).json({ student: toStudentListItem(created) });
