@@ -26,6 +26,7 @@ const KnowledgeHubItemSchema = new Schema(
     fileMime:  { type: String, trim: true, maxlength: 100, default: '' },
 
     // gallery images
+    imageAssetIds: { type: [String], default: [] },
     imagePaths: { type: [String], default: [] },
     imageNames: { type: [String], default: [] },
 

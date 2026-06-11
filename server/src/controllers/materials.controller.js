@@ -1,7 +1,17 @@
+import fs from 'fs';
+import path from 'path';
+import mongoose from 'mongoose';
 import { Material } from '../models/Material.js';
 import { Student } from '../models/Student.js';
+import { DEFAULT_LMS_DATA } from '../data/defaultLmsData.js';
 import { getOrCreateAppDataPayload } from '../services/appData.service.js';
 import { logAdminAction } from '../middleware/adminAuth.js';
+import {
+  deleteImageAsset,
+  getImageAssetInfo,
+  openImageDownloadStream,
+  storeImageUpload,
+} from '../services/imageStore.service.js';
 
 function normalizeId(value) {
   if (value == null) return '';
@@ -12,10 +22,68 @@ function normalizeName(value) {
   return typeof value === 'string' ? value : '';
 }
 
+function buildAbsoluteUrl(req, value) {
+  if (!value) return '';
+  if (/^https?:\/\//i.test(String(value))) return String(value);
+  return `${req.protocol}://${req.get('host')}/${String(value).replace(/^\/+/, '')}`;
+}
+
+function removeUploadedFile(file) {
+  if (file?.path && fs.existsSync(file.path)) {
+    fs.unlinkSync(file.path);
+  }
+}
+
 function toOption(node) {
   const id = normalizeId(node?.id || node?._id || node?.key || node?.code || node?.name);
   const name = normalizeName(node?.name || node?.title || node?.label);
   return { id, name };
+}
+
+function getFallbackBranches() {
+  return Array.isArray(DEFAULT_LMS_DATA?.academics?.branches) ? DEFAULT_LMS_DATA.academics.branches : [];
+}
+
+async function loadAcademicBranches() {
+  if (mongoose.connection.readyState !== 1) {
+    return getFallbackBranches();
+  }
+
+  try {
+    const payload = await getOrCreateAppDataPayload('academics', { branches: getFallbackBranches() });
+    return Array.isArray(payload?.branches) ? payload.branches : getFallbackBranches();
+  } catch {
+    return getFallbackBranches();
+  }
+}
+
+async function getAuthorizedStudentMaterial(materialId, studentId) {
+  if (!studentId) {
+    return { status: 401, body: { message: 'Student authentication required' } };
+  }
+
+  const student = await Student.findById(studentId).lean();
+  if (!student) {
+    return { status: 404, body: { message: 'Student not found' } };
+  }
+
+  const material = await Material.findOne({ _id: materialId, isActive: true }).lean();
+  if (!material) {
+    return { status: 404, body: { message: 'Material not found' } };
+  }
+
+  if (
+    material.branchId !== student.branchId ||
+    material.intakeId !== student.intakeId ||
+    material.batchId !== student.batchId
+  ) {
+    return {
+      status: 403,
+      body: { message: 'Access denied. This material is not available for your batch.' },
+    };
+  }
+
+  return { student, material };
 }
 
 // Validation helpers
@@ -79,11 +147,11 @@ function validateUploadFields(body) {
 // Get academic hierarchy for dropdowns
 export async function getAcademicHierarchy(req, res, next) {
   try {
-    const payload = await getOrCreateAppDataPayload('academics', { branches: [] });
+    const branches = await loadAcademicBranches();
     
     // Return the hierarchy structure for frontend dropdowns
     res.json({
-      branches: Array.isArray(payload?.branches) ? payload.branches : []
+      branches
     });
   } catch (err) {
     next(err);
@@ -93,8 +161,7 @@ export async function getAcademicHierarchy(req, res, next) {
 // Get branches for the first dropdown
 export async function getBranches(req, res, next) {
   try {
-    const payload = await getOrCreateAppDataPayload('academics', { branches: [] });
-    const branches = Array.isArray(payload?.branches) ? payload.branches : [];
+    const branches = await loadAcademicBranches();
     
     res.json({ 
       branches: branches.map((b) => toOption(b)).filter((b) => b.id && b.name)
@@ -113,8 +180,7 @@ export async function getIntakes(req, res, next) {
       return res.status(400).json({ message: 'Branch ID is required' });
     }
     
-    const payload = await getOrCreateAppDataPayload('academics', { branches: [] });
-    const branches = Array.isArray(payload?.branches) ? payload.branches : [];
+    const branches = await loadAcademicBranches();
     
     const branch = branches.find(
       (b) => normalizeId(b?.id || b?._id || b?.key || b?.code || b?.name) === normalizeId(branchId)
@@ -142,8 +208,7 @@ export async function getBatches(req, res, next) {
       return res.status(400).json({ message: 'Branch ID and Intake ID are required' });
     }
     
-    const payload = await getOrCreateAppDataPayload('academics', { branches: [] });
-    const branches = Array.isArray(payload?.branches) ? payload.branches : [];
+    const branches = await loadAcademicBranches();
     
     const branch = branches.find(
       (b) => normalizeId(b?.id || b?._id || b?.key || b?.code || b?.name) === normalizeId(branchId)
@@ -161,9 +226,12 @@ export async function getBatches(req, res, next) {
     }
     
     const batches = Array.isArray(intake.batches) ? intake.batches : [];
+    const resolvedBatches = batches.length > 0
+      ? batches
+      : [{ id: normalizeId(intake?.id || intake?.name), name: normalizeName(intake?.name || intake?.id), studentCount: 0 }];
     
     res.json({ 
-      batches: batches.map((b) => ({ ...toOption(b), studentCount: Number(b?.studentCount || 0) }))
+      batches: resolvedBatches.map((b) => ({ ...toOption(b), studentCount: Number(b?.studentCount || 0) }))
     });
   } catch (err) {
     next(err);
@@ -193,48 +261,74 @@ export async function uploadMaterial(req, res, next) {
     // Extract week/module number from title for categorization
     const weekMatch = title.match(/Week\s+(\d+)/i);
     const moduleMatch = title.match(/Module\s+(\d+)/i);
+    const isImageUpload = String(req.file.mimetype || '').startsWith('image/');
+    let imageAssetId = '';
     
-    // Create material record
-    const material = new Material({
-      branchId: branchId.trim(),
-      intakeId: intakeId.trim(),
-      batchId: batchId.trim(),
-      title: title.trim(),
-      description: description?.trim() || '',
-      fileName: req.file.originalname,
-      fileUrl: req.file.path || req.file.filename, // Depends on storage configuration
-      fileSize: req.file.size,
-      fileType: req.file.mimetype,
-      uploadedBy: adminAuth.id,
-      uploadedByName: adminAuth.name || 'Admin',
-      category: category?.trim() || 'Study Material',
-      week: weekMatch ? parseInt(weekMatch[1]) : null,
-      module: moduleMatch ? parseInt(moduleMatch[1]) : null,
-    });
-    
-    const saved = await material.save();
-    
-    // Log the action for audit trail
-    await logAdminAction(adminAuth.id, 'UPLOAD_MATERIAL', {
-      materialId: saved._id,
-      title: title.trim(),
-      branchId,
-      intakeId, 
-      batchId,
-      fileSize: req.file.size
-    });
-    
-    res.status(201).json({
-      message: 'Material uploaded successfully',
-      material: {
-        id: saved._id,
-        title: saved.title,
-        fileName: saved.fileName,
-        fileSize: saved.fileSize,
-        fileType: saved.fileType,
-        uploadedAt: saved.createdAt
+    try {
+      if (isImageUpload) {
+        imageAssetId = await storeImageUpload(req.file, {
+          scope: 'materials',
+          title: title.trim(),
+          branchId: branchId.trim(),
+          intakeId: intakeId.trim(),
+          batchId: batchId.trim(),
+        });
       }
-    });
+
+      // Create material record
+      const material = new Material({
+        branchId: branchId.trim(),
+        intakeId: intakeId.trim(),
+        batchId: batchId.trim(),
+        title: title.trim(),
+        description: description?.trim() || '',
+        fileName: req.file.originalname,
+        fileUrl: isImageUpload ? 'api/materials/student/download/content/pending' : (req.file.path || req.file.filename),
+        imageAssetId,
+        fileSize: req.file.size,
+        fileType: req.file.mimetype,
+        uploadedBy: adminAuth.id,
+        uploadedByName: adminAuth.name || 'Admin',
+        category: category?.trim() || 'Study Material',
+        week: weekMatch ? parseInt(weekMatch[1]) : null,
+        module: moduleMatch ? parseInt(moduleMatch[1]) : null,
+      });
+
+      const saved = await material.save();
+    
+      // Log the action for audit trail
+      await logAdminAction(adminAuth.id, 'UPLOAD_MATERIAL', {
+        materialId: saved._id,
+        title: title.trim(),
+        branchId,
+        intakeId,
+        batchId,
+        fileSize: req.file.size,
+        storedInMongo: isImageUpload,
+      });
+
+      res.status(201).json({
+        message: 'Material uploaded successfully',
+        material: {
+          id: saved._id,
+          title: saved.title,
+          fileName: saved.fileName,
+          fileSize: saved.fileSize,
+          fileType: saved.fileType,
+          uploadedAt: saved.createdAt,
+        }
+      });
+    } catch (err) {
+      if (imageAssetId) {
+        await deleteImageAsset(imageAssetId);
+      }
+      removeUploadedFile(req.file);
+      throw err;
+    }
+
+    if (isImageUpload) {
+      removeUploadedFile(req.file);
+    }
     
   } catch (err) {
     next(err);
@@ -321,49 +415,62 @@ export async function downloadMaterial(req, res, next) {
   try {
     const { materialId } = req.params;
     const studentId = req.auth?.sub;
-    
-    if (!studentId) {
-      return res.status(401).json({ message: 'Student authentication required' });
+    const resolved = await getAuthorizedStudentMaterial(materialId, studentId);
+    if (resolved.status) {
+      return res.status(resolved.status).json(resolved.body);
     }
-    
-    // Find student to get their batch info
-    const student = await Student.findById(studentId).lean();
-    if (!student) {
-      return res.status(404).json({ message: 'Student not found' });
-    }
-    
-    // Find material and verify access
-    const material = await Material.findOne({
-      _id: materialId,
-      isActive: true
-    }).lean();
-    
-    if (!material) {
-      return res.status(404).json({ message: 'Material not found' });
-    }
-    
-    // Verify student has access to this material
-    if (material.branchId !== student.branchId || 
-        material.intakeId !== student.intakeId || 
-        material.batchId !== student.batchId) {
-      return res.status(403).json({ 
-        message: 'Access denied. This material is not available for your batch.' 
-      });
-    }
+    const { material } = resolved;
     
     // Increment download count
     await Material.findByIdAndUpdate(materialId, { 
       $inc: { downloadCount: 1 } 
     });
     
-    // Return file download URL or stream
-    // This depends on your file storage setup (local files, S3, etc.)
     res.json({
-      downloadUrl: material.fileUrl,
+      downloadUrl: buildAbsoluteUrl(req, `api/materials/student/download/${materialId}/content`),
       fileName: material.fileName,
       fileSize: material.fileSize
     });
     
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function streamStudentMaterialContent(req, res, next) {
+  try {
+    const { materialId } = req.params;
+    const resolved = await getAuthorizedStudentMaterial(materialId, req.auth?.sub);
+    if (resolved.status) {
+      return res.status(resolved.status).json(resolved.body);
+    }
+
+    const { material } = resolved;
+
+    if (material.imageAssetId) {
+      const asset = await getImageAssetInfo(material.imageAssetId);
+      if (!asset) {
+        return res.status(404).json({ message: 'Material file not found' });
+      }
+
+      const stream = openImageDownloadStream(material.imageAssetId);
+      if (!stream) {
+        return res.status(404).json({ message: 'Material file not found' });
+      }
+
+      res.setHeader('Content-Type', asset.contentType || material.fileType || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `attachment; filename="${material.fileName || asset.filename || 'material'}"`);
+      stream.on('error', next);
+      stream.pipe(res);
+      return;
+    }
+
+    const absPath = path.resolve(material.fileUrl);
+    if (!fs.existsSync(absPath)) {
+      return res.status(404).json({ message: 'Material file not found' });
+    }
+
+    res.download(absPath, material.fileName || path.basename(absPath));
   } catch (err) {
     next(err);
   }

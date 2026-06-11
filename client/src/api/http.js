@@ -3,12 +3,17 @@ let resolvingApiBaseUrl = null;
 
 function envBaseUrl() {
   const v = import.meta.env.VITE_API_BASE_URL;
-  return typeof v === 'string' && v.trim() ? v.trim().replace(/\/$/, '') : null;
+  if (typeof v !== 'string' || !v.trim()) return null;
+
+  return v
+    .trim()
+    .replace(/\/$/, '')
+    .replace(/\/api$/, '');
 }
 
 async function canReachApi(baseUrl, { timeoutMs = 800 } = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const controller = new globalThis.AbortController();
+  const timer = globalThis.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const res = await fetch(`${baseUrl}/api/health`, {
@@ -20,7 +25,7 @@ async function canReachApi(baseUrl, { timeoutMs = 800 } = {}) {
   } catch {
     return false;
   } finally {
-    clearTimeout(timer);
+    globalThis.clearTimeout(timer);
   }
 }
 
@@ -48,7 +53,6 @@ async function resolveApiBaseUrl() {
     // The server may auto-increment PORT (5000..5009). Probe quickly.
     for (let port = 5000; port <= 5009; port += 1) {
       const base = `http://localhost:${port}`;
-      // eslint-disable-next-line no-await-in-loop
       if (await canReachApi(base)) {
         resolvedApiBaseUrl = base;
         if (typeof window !== 'undefined') {
@@ -67,6 +71,10 @@ async function resolveApiBaseUrl() {
   } finally {
     resolvingApiBaseUrl = null;
   }
+}
+
+export async function getApiBaseUrl() {
+  return resolveApiBaseUrl();
 }
 
 export class ApiError extends Error {

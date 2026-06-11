@@ -68,7 +68,7 @@ export default function AdminScheduleLecturePage() {
     if (!form.branchId || !form.intakeId) return;
     apiGet(`/api/materials/branches/${encodeURIComponent(form.branchId)}/intakes/${encodeURIComponent(form.intakeId)}/batches`)
       .then((d) => setBatches(Array.isArray(d?.batches) ? d.batches : [])).catch(() => {});
-  }, [form.intakeId]); // eslint-disable-line
+  }, [form.branchId, form.intakeId]); // eslint-disable-line
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const setEdit = (k) => (e) => setEditForm((f) => ({ ...f, [k]: e.target.value }));

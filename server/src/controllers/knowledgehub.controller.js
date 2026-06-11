@@ -3,6 +3,12 @@ import path from 'path';
 import { Admin } from '../models/Admin.js';
 import { KnowledgeHubItem } from '../models/KnowledgeHubItem.js';
 import { Student } from '../models/Student.js';
+import {
+  deleteImageAsset,
+  getImageAssetInfo,
+  openImageDownloadStream,
+  storeImageUpload,
+} from '../services/imageStore.service.js';
 
 const ALLOWED_FILE_MIMES = new Set([
   'application/pdf',
@@ -32,7 +38,21 @@ function isValidUrl(url) {
   } catch { return false; }
 }
 
-function toItem(d) {
+function isAbsoluteUrl(value) {
+  return /^https?:\/\//i.test(String(value || ''));
+}
+
+function buildAbsoluteUrl(req, value) {
+  if (!value) return '';
+  if (isAbsoluteUrl(value)) return String(value);
+  return `${req.protocol}://${req.get('host')}/${String(value).replace(/^\/+/, '')}`;
+}
+
+function toItem(d, req) {
+  const imagePaths = Array.isArray(d.imageAssetIds) && d.imageAssetIds.length > 0
+    ? d.imageAssetIds.map((_, index) => buildAbsoluteUrl(req, `api/knowledge-hub/media/${String(d._id)}/${index}`))
+    : (Array.isArray(d.imagePaths) ? d.imagePaths.map((value) => buildAbsoluteUrl(req, value)) : []);
+
   return {
     id: String(d._id),
     branchId: d.branchId,
@@ -44,7 +64,8 @@ function toItem(d) {
     hasFile:    Boolean(d.filePath),
     fileName:   d.fileName || '',
     fileSize:   d.fileSize || 0,
-    imagePaths: Array.isArray(d.imagePaths) ? d.imagePaths : [],
+    downloadUrl: d.filePath ? buildAbsoluteUrl(req, `api/knowledge-hub/download/${String(d._id)}`) : '',
+    imagePaths,
     imageNames: Array.isArray(d.imageNames) ? d.imageNames : [],
     contentUrl: d.contentUrl || '',
     textContent: d.textContent || '',
@@ -53,6 +74,14 @@ function toItem(d) {
     addedByRole: d.addedByRole,
     createdAt:  d.createdAt,
   };
+}
+
+function buildVisibilityFilter(user) {
+  const filter = {};
+  if (user?.batchId) filter.batchId = normalizeId(user.batchId);
+  if (user?.intakeId) filter.intakeId = normalizeId(user.intakeId);
+  if (user?.branchId) filter.branchId = normalizeId(user.branchId);
+  return filter;
 }
 
 function getUploadedFiles(req, fieldName) {
@@ -70,7 +99,11 @@ function removeUploadedFiles(files) {
   }
 }
 
-function removeStoredKnowledgeHubFiles(item) {
+async function removeStoredKnowledgeHubFiles(item) {
+  if (Array.isArray(item?.imageAssetIds) && item.imageAssetIds.length > 0) {
+    await Promise.allSettled(item.imageAssetIds.map((assetId) => deleteImageAsset(assetId)));
+  }
+
   const paths = [item?.filePath, ...(Array.isArray(item?.imagePaths) ? item.imagePaths : [])].filter(Boolean);
   for (const filePath of paths) {
     if (fs.existsSync(filePath)) {
@@ -93,13 +126,55 @@ export async function listMyHubItems(req, res, next) {
   try {
     const user = await resolveUserBatch(req.auth);
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
-    if (!user.batchId) return res.json({ items: [] });
+    const visibilityFilter = buildVisibilityFilter(user);
+    if (!visibilityFilter.batchId && !visibilityFilter.intakeId && !visibilityFilter.branchId) {
+      return res.json({ items: [] });
+    }
 
-    const items = await KnowledgeHubItem.find({ batchId: normalizeId(user.batchId) })
+    const items = await KnowledgeHubItem.find(visibilityFilter)
       .sort({ createdAt: -1 })
       .lean();
-    res.json({ items: items.map(toItem) });
+    res.json({ items: items.map((item) => toItem(item, req)) });
   } catch (err) { next(err); }
+}
+
+export async function streamHubImage(req, res, next) {
+  try {
+    const item = await KnowledgeHubItem.findById(req.params.id)
+      .select('imageAssetIds imagePaths imageNames title')
+      .lean();
+    if (!item) return res.status(404).json({ message: 'Resource not found' });
+
+    const index = Number.parseInt(req.params.index, 10);
+    if (!Number.isInteger(index) || index < 0) {
+      return res.status(400).json({ message: 'Invalid image index' });
+    }
+
+    const assetId = Array.isArray(item.imageAssetIds) ? item.imageAssetIds[index] : '';
+    if (assetId) {
+      const asset = await getImageAssetInfo(assetId);
+      if (!asset) return res.status(404).json({ message: 'Image not found' });
+
+      const stream = openImageDownloadStream(assetId);
+      if (!stream) return res.status(404).json({ message: 'Image not found' });
+
+      res.setHeader('Content-Type', asset.contentType || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `inline; filename="${item.imageNames?.[index] || asset.filename || `image-${index + 1}`}"`);
+      stream.on('error', next);
+      stream.pipe(res);
+      return;
+    }
+
+    const legacyPath = Array.isArray(item.imagePaths) ? item.imagePaths[index] : '';
+    if (!legacyPath) return res.status(404).json({ message: 'Image not found' });
+
+    const absPath = path.resolve(legacyPath);
+    if (!fs.existsSync(absPath)) return res.status(404).json({ message: 'Image not found' });
+
+    res.sendFile(absPath);
+  } catch (err) {
+    next(err);
+  }
 }
 
 // ─── STUDENT: download a file resource ───────────────────────────────────────
@@ -111,7 +186,10 @@ export async function studentDownloadResource(req, res, next) {
     const item = await KnowledgeHubItem.findById(req.params.id).lean();
     if (!item) return res.status(404).json({ message: 'Resource not found' });
 
-    if (normalizeId(item.batchId) !== normalizeId(student.batchId)) {
+    const sameBatch = student.batchId && normalizeId(item.batchId) === normalizeId(student.batchId);
+    const sameIntake = !student.batchId && student.intakeId && normalizeId(item.intakeId) === normalizeId(student.intakeId);
+    const sameBranch = !student.batchId && !student.intakeId && student.branchId && normalizeId(item.branchId) === normalizeId(student.branchId);
+    if (!sameBatch && !sameIntake && !sameBranch) {
       return res.status(403).json({ message: 'This resource is not available for your batch.' });
     }
     if (!item.filePath) return res.status(404).json({ message: 'No file attached' });
@@ -203,7 +281,7 @@ export async function lecturerDeleteHubItem(req, res, next) {
       return res.status(403).json({ message: 'You can only delete your own resources' });
     }
 
-    removeStoredKnowledgeHubFiles(item);
+    await removeStoredKnowledgeHubFiles(item);
     await KnowledgeHubItem.findByIdAndDelete(req.params.id);
     res.json({ ok: true });
   } catch (err) { next(err); }
@@ -217,7 +295,7 @@ export async function adminListHubItems(req, res, next) {
     if (batchId) filter.batchId = normalizeId(batchId);
 
     const items = await KnowledgeHubItem.find(filter).sort({ createdAt: -1 }).lean();
-    res.json({ items: items.map(toItem) });
+    res.json({ items: items.map((item) => toItem(item, req)) });
   } catch (err) { next(err); }
 }
 
@@ -233,6 +311,7 @@ export async function adminAddHubItem(req, res, next) {
     if (!normalizeId(batchId))  return res.status(400).json({ message: 'Batch is required' });
 
     let filePath = '', fileName = '', fileSize = 0, fileMime = '';
+    let imageAssetIds = [];
     let imagePaths = [];
     let imageNames = [];
 
@@ -267,31 +346,53 @@ export async function adminAddHubItem(req, res, next) {
         }
       }
 
-      imagePaths = files.map((file) => file.path);
       imageNames = files.map((file) => file.originalname);
+
+      try {
+        for (const file of files) {
+          // GridFS avoids writing persisted image assets to the local uploads directory.
+          const assetId = await storeImageUpload(file, {
+            scope: 'knowledge-hub',
+            resourceType,
+            title: safeStr(title),
+          });
+          imageAssetIds.push(assetId);
+        }
+      } catch (err) {
+        await Promise.allSettled(imageAssetIds.map((assetId) => deleteImageAsset(assetId)));
+        throw err;
+      } finally {
+        removeUploadedFiles(files);
+      }
     }
 
     const adminId = String(req.adminAuth?.sub || req.adminAuth?.id || '');
     const adminDoc = adminId ? await Admin.findById(adminId).select('name').lean() : null;
     const adminName = adminDoc?.name || 'Admin';
 
-    const created = await KnowledgeHubItem.create({
-      branchId: normalizeId(branchId),
-      intakeId: normalizeId(intakeId || ''),
-      batchId:  normalizeId(batchId),
-      resourceType,
-      title:       safeStr(title),
-      description: safeStr(description || '', 1000),
-      filePath, fileName, fileSize, fileMime,
-      imagePaths, imageNames,
-      contentUrl:  contentUrl ? safeStr(contentUrl, 1000) : '',
-      textContent: textContent ? safeStr(textContent, 20000) : '',
-      addedBy:     adminId,
-      addedByName: adminName,
-      addedByRole: 'superadmin',
-    });
+    let created;
+    try {
+      created = await KnowledgeHubItem.create({
+        branchId: normalizeId(branchId),
+        intakeId: normalizeId(intakeId || ''),
+        batchId:  normalizeId(batchId),
+        resourceType,
+        title:       safeStr(title),
+        description: safeStr(description || '', 1000),
+        filePath, fileName, fileSize, fileMime,
+        imageAssetIds, imagePaths, imageNames,
+        contentUrl:  contentUrl ? safeStr(contentUrl, 1000) : '',
+        textContent: textContent ? safeStr(textContent, 20000) : '',
+        addedBy:     adminId,
+        addedByName: adminName,
+        addedByRole: 'superadmin',
+      });
+    } catch (err) {
+      await Promise.allSettled(imageAssetIds.map((assetId) => deleteImageAsset(assetId)));
+      throw err;
+    }
 
-    res.status(201).json({ item: toItem(created) });
+    res.status(201).json({ item: toItem(created, req) });
   } catch (err) { next(err); }
 }
 
@@ -300,7 +401,7 @@ export async function adminDeleteHubItem(req, res, next) {
   try {
     const item = await KnowledgeHubItem.findByIdAndDelete(req.params.id).lean();
     if (!item) return res.status(404).json({ message: 'Resource not found' });
-    removeStoredKnowledgeHubFiles(item);
+    await removeStoredKnowledgeHubFiles(item);
     res.json({ ok: true });
   } catch (err) { next(err); }
 }

@@ -1,15 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { FileText, Link as LinkIcon, Video, StickyNote, Plus, Trash2, X, Upload, Image as ImageIcon } from 'lucide-react';
-import { apiGet, apiDelete } from '../../api/http.js';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
+import { apiGet, apiDelete, getApiBaseUrl } from '../../api/http.js';
 
 const TYPE_ICON  = { file: FileText, link: LinkIcon, video: Video, note: StickyNote, gallery: ImageIcon };
 const TYPE_COLOR = { file: 'bg-sky-50 text-sky-600', link: 'bg-purple-50 text-purple-600', video: 'bg-rose-50 text-rose-600', note: 'bg-amber-50 text-amber-600', gallery: 'bg-emerald-50 text-emerald-600' };
 
 function mediaUrl(value) {
   if (!value) return '';
-  return `${API_BASE}/${String(value).replace(/^\/+/, '')}`;
+  if (/^https?:\/\//i.test(String(value))) return String(value);
+  return `/${String(value).replace(/^\/+/, '')}`;
 }
 
 const emptyForm = { resourceType: 'file', title: '', description: '', contentUrl: '', textContent: '' };
@@ -41,7 +40,7 @@ export default function LecturerKnowledgeHubPage() {
   const onAdd = async (e) => {
     e.preventDefault(); setFormErr(''); setSubmitting(true);
     try {
-      const fd = new FormData();
+      const fd = new globalThis.FormData();
       fd.append('resourceType', form.resourceType);
       fd.append('title', form.title.trim());
       if (form.description) fd.append('description', form.description.trim());
@@ -49,7 +48,8 @@ export default function LecturerKnowledgeHubPage() {
       if ((form.resourceType === 'link' || form.resourceType === 'video') && form.contentUrl) fd.append('contentUrl', form.contentUrl.trim());
       if (form.resourceType === 'note' && form.textContent) fd.append('textContent', form.textContent);
 
-      const res = await fetch(`${API_BASE}/api/knowledge-hub/lecturer`, {
+      const apiBase = await getApiBaseUrl();
+      const res = await fetch(`${apiBase}/api/knowledge-hub/lecturer`, {
         method: 'POST',
         body: fd,
         credentials: 'include',
@@ -66,7 +66,7 @@ export default function LecturerKnowledgeHubPage() {
   const onDelete = async (id) => {
     if (!window.confirm('Delete this resource?')) return;
     try { await apiDelete(`/api/knowledge-hub/lecturer/${id}`); load(); }
-    catch (err) { alert(err?.message || 'Failed to delete'); }
+    catch (err) { globalThis.alert(err?.message || 'Failed to delete'); }
   };
 
   const inputCls = 'w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100';

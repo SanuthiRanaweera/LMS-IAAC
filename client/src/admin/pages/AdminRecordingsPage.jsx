@@ -1,14 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Play, Plus, Upload, Video, X } from 'lucide-react';
-import { apiGet } from '../../api/http.js';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
-
-const TITLE_RE = /^Week \d+\s*[—–-]\s*.+\s*[—–-]\s*Recording$/i;
+import { apiGet, getApiBaseUrl } from '../../api/http.js';
 
 function validateTitle(t) {
   if (!t || t.trim().length < 5) return 'Title must be at least 5 characters.';
-  if (!TITLE_RE.test(t.trim())) return 'Title must follow: "Week N — Topic Name — Recording"';
   return '';
 }
 
@@ -28,6 +23,7 @@ export default function AdminRecordingsPage() {
   const [formErr, setFormErr] = useState('');
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
+  const [apiBase, setApiBase] = useState(import.meta.env.VITE_API_URL || '');
 
   const [branches, setBranches] = useState([]);
   const [intakes, setIntakes] = useState([]);
@@ -62,6 +58,19 @@ export default function AdminRecordingsPage() {
 
   useEffect(() => {
     return loadRecordings();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getApiBaseUrl()
+      .then((base) => {
+        if (!cancelled) setApiBase(base);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -173,6 +182,7 @@ export default function AdminRecordingsPage() {
     setFormErr('');
     setUploading(true);
     try {
+      const apiOrigin = apiBase || (await getApiBaseUrl());
       const fd = new globalThis.FormData();
       fd.append('branchId', selectedBranch);
       fd.append('intakeId', selectedIntake);
@@ -182,7 +192,7 @@ export default function AdminRecordingsPage() {
       if (uploadMode === 'file') fd.append('video', file);
       else fd.append('videoLink', videoLink.trim());
 
-      const res = await fetch(`${API_BASE}/api/admin/recordings`, {
+      const res = await fetch(`${apiOrigin}/api/admin/recordings`, {
         method: 'POST',
         body: fd,
         credentials: 'include',
@@ -213,10 +223,11 @@ export default function AdminRecordingsPage() {
       return;
     }
 
+    const apiOrigin = apiBase || (await getApiBaseUrl());
     setPlaying({
       id: rec.id,
       title: rec.title,
-      streamUrl: `${API_BASE}/api/admin/recordings/stream/${rec.id}`,
+      streamUrl: `${apiOrigin}/api/admin/recordings/stream/${encodeURIComponent(rec.id)}`,
       isEmbed: false,
     });
   };
@@ -255,9 +266,6 @@ export default function AdminRecordingsPage() {
 
       {showForm && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="mb-1 text-xs font-semibold text-slate-500">
-            Title format: <span className="text-slate-700">Week N — Topic Name — Recording</span>
-          </p>
           {formErr ? (
             <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{formErr}</div>
           ) : null}

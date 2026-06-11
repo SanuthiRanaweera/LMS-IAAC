@@ -11,6 +11,7 @@ import {
   uploadMaterial,
   getStudentMaterials,
   downloadMaterial,
+  streamStudentMaterialContent,
   getAdminMaterials,
 } from '../controllers/materials.controller.js';
 
@@ -84,5 +85,6 @@ materialsRouter.get(
 // Student endpoints (require student auth)
 materialsRouter.get('/student', requireAuth, getStudentMaterials);
 materialsRouter.get('/student/download/:materialId', requireAuth, downloadMaterial);
+materialsRouter.get('/student/download/:materialId/content', requireAuth, streamStudentMaterialContent);
 
 export default materialsRouter;

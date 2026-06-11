@@ -21,8 +21,6 @@ function validateRecordingTitle(title) {
   if (t.length < 5) return 'Title must be at least 5 characters';
   const generic = ['recording', 'video', 'recording1', 'video1', 'untitled', 'new'];
   if (generic.includes(t.toLowerCase())) return 'Please provide a descriptive title';
-  const fmt = /^Week\s+\d+\s*[—–-]\s*.+/i;
-  if (!fmt.test(t)) return 'Title must follow format: "Week N — Topic Name — Recording"';
   return null;
 }
 
@@ -32,6 +30,39 @@ function isValidVideoUrl(url) {
     return u.protocol === 'https:' || u.protocol === 'http:';
   } catch {
     return false;
+  }
+}
+
+function buildEmbedUrl(rawUrl) {
+  if (!rawUrl) return '';
+
+  try {
+    const url = new URL(rawUrl);
+    const host = url.hostname.replace(/^www\./i, '').toLowerCase();
+
+    if (host === 'youtu.be') {
+      const videoId = url.pathname.split('/').filter(Boolean)[0];
+      return videoId ? `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}` : rawUrl;
+    }
+
+    if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com') {
+      const videoId = url.searchParams.get('v') || url.pathname.split('/').filter(Boolean).pop();
+      if (!videoId) return rawUrl;
+      return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}`;
+    }
+
+    if (host === 'vimeo.com') {
+      const videoId = url.pathname.split('/').filter(Boolean).pop();
+      return videoId ? `https://player.vimeo.com/video/${encodeURIComponent(videoId)}` : rawUrl;
+    }
+
+    if (host === 'player.vimeo.com') {
+      return rawUrl;
+    }
+
+    return rawUrl;
+  } catch {
+    return rawUrl;
   }
 }
 
@@ -54,15 +85,26 @@ function toItem(r) {
   };
 }
 
+function buildVisibilityFilter(user) {
+  const filter = {};
+  if (user?.batchId) filter.batchId = normalizeId(user.batchId);
+  if (user?.intakeId) filter.intakeId = normalizeId(user.intakeId);
+  if (user?.branchId) filter.branchId = normalizeId(user.branchId);
+  return filter;
+}
+
 // ─── STUDENT: list recordings for their batch ────────────────────────────────
 export async function studentListRecordings(req, res, next) {
   try {
     const student = await Student.findById(req.auth.sub).lean();
     if (!student) return res.status(401).json({ message: 'Unauthorized' });
 
-    if (!student.batchId) return res.json({ recordings: [] });
+    const visibilityFilter = buildVisibilityFilter(student);
+    if (!visibilityFilter.batchId && !visibilityFilter.intakeId && !visibilityFilter.branchId) {
+      return res.json({ recordings: [] });
+    }
 
-    const recordings = await Recording.find({ batchId: normalizeId(student.batchId) })
+    const recordings = await Recording.find(visibilityFilter)
       .sort({ createdAt: -1 })
       .lean();
 
@@ -81,14 +123,17 @@ export async function studentStreamRecording(req, res, next) {
     const recording = await Recording.findById(req.params.id).lean();
     if (!recording) return res.status(404).json({ message: 'Recording not found' });
 
-    // Batch-level access check
-    if (normalizeId(recording.batchId) !== normalizeId(student.batchId)) {
+    // Batch-level access check with branch/intake fallback for unassigned students.
+    const sameBatch = student.batchId && normalizeId(recording.batchId) === normalizeId(student.batchId);
+    const sameIntake = !student.batchId && student.intakeId && normalizeId(recording.intakeId) === normalizeId(student.intakeId);
+    const sameBranch = !student.batchId && !student.intakeId && student.branchId && normalizeId(recording.branchId) === normalizeId(student.branchId);
+    if (!sameBatch && !sameIntake && !sameBranch) {
       return res.status(403).json({ message: 'This recording is not available for your batch.' });
     }
 
     if (recording.videoLink) {
       // Return the embed URL — client renders it in an iframe
-      return res.json({ embedUrl: recording.videoLink });
+      return res.json({ embedUrl: buildEmbedUrl(recording.videoLink) });
     }
 
     if (!recording.filePath) return res.status(404).json({ message: 'No video file' });
@@ -246,7 +291,7 @@ export async function adminStreamRecording(req, res, next) {
     const recording = await Recording.findById(req.params.id).lean();
     if (!recording) return res.status(404).json({ message: 'Recording not found' });
 
-    if (recording.videoLink) return res.json({ embedUrl: recording.videoLink });
+    if (recording.videoLink) return res.json({ embedUrl: buildEmbedUrl(recording.videoLink) });
     if (!recording.filePath) return res.status(404).json({ message: 'No file' });
 
     const absPath = path.resolve(recording.filePath);

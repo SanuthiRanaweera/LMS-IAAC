@@ -1,11 +1,29 @@
 import mongoose from 'mongoose';
+import { MongoMemoryServer } from 'mongodb-memory-server';
+
+let memoryServer = null;
+
+async function connectInMemoryDb() {
+  if (!memoryServer) {
+    memoryServer = await MongoMemoryServer.create();
+  }
+
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.disconnect();
+  }
+
+  mongoose.set('strictQuery', true);
+  await mongoose.connect(memoryServer.getUri('lms'));
+
+  // eslint-disable-next-line no-console
+  console.warn('MongoDB Atlas unavailable; using in-memory MongoDB for development');
+  return true;
+}
 
 export async function connectDb() {
   const mongoUri = process.env.MONGODB_URI;
   if (!mongoUri) {
-    // eslint-disable-next-line no-console
-    console.warn('MONGODB_URI is not set; skipping MongoDB connection');
-    return false;
+    return connectInMemoryDb();
   }
 
   mongoose.set('strictQuery', true);
@@ -22,6 +40,17 @@ export async function connectDb() {
     if (process.env.MONGODB_REQUIRED === 'true') {
       throw err;
     }
-    return false;
+    return connectInMemoryDb();
+  }
+}
+
+export async function closeDb() {
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.disconnect();
+  }
+
+  if (memoryServer) {
+    await memoryServer.stop();
+    memoryServer = null;
   }
 }

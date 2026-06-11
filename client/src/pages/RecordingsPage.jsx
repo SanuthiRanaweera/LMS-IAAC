@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Video, ExternalLink, Play, X } from 'lucide-react';
-import { apiGet } from '../api/http.js';
+import { apiGet, getApiBaseUrl } from '../api/http.js';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -29,7 +29,8 @@ export default function RecordingsPage() {
       }
     } else {
       // Streamed file
-      setPlaying({ id: rec.id, title: rec.title, streamUrl: `${API_BASE}/api/recordings/stream/${rec.id}`, isEmbed: false });
+      const apiOrigin = API_BASE || (await getApiBaseUrl());
+      setPlaying({ id: rec.id, title: rec.title, streamUrl: `${apiOrigin}/api/recordings/stream/${encodeURIComponent(rec.id)}`, isEmbed: false });
     }
   };
 

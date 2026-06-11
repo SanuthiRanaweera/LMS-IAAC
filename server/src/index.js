@@ -1,5 +1,5 @@
 import { createServer } from './server.js';
-import { connectDb } from './config/db.js';
+import { closeDb, connectDb } from './config/db.js';
 import dotenv from 'dotenv';
 
 import bcrypt from 'bcryptjs';
@@ -31,6 +31,20 @@ if (dbConnected) {
 }
 
 const app = createServer();
+
+async function shutdown(signal) {
+  try {
+    await closeDb();
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(`Failed to close database on ${signal}:`, err?.message || err);
+  } finally {
+    process.exit(0);
+  }
+}
+
+process.once('SIGINT', () => { void shutdown('SIGINT'); });
+process.once('SIGTERM', () => { void shutdown('SIGTERM'); });
 
 function listenWithRetry(startPort, maxAttempts = 10) {
   let port = startPort;

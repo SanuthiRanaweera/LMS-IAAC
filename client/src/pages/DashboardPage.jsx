@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
-import { apiGet } from '../api/http.js';
+import { useNavigate, useOutletContext } from 'react-router-dom';
+import { ApiError, apiGet } from '../api/http.js';
 import DashboardMain from '../components/DashboardMain.jsx';
 
 // 1. Professional Skeleton Component
@@ -16,6 +16,7 @@ const DashboardSkeleton = () => (
 );
 
 export default function DashboardPage() {
+  const navigate = useNavigate();
   const { student } = useOutletContext();
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,7 +36,12 @@ export default function DashboardPage() {
       })
       .catch((err) => {
         if (!cancelled) {
-          setError('Unable to load dashboard data. Please check your connection.');
+          if (err instanceof ApiError && err.status === 401) {
+            navigate('/login', { replace: true });
+            return;
+          }
+
+          setError(err?.message || 'Unable to load dashboard data.');
           setIsLoading(false);
         }
       });
@@ -43,7 +49,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [navigate]);
 
   // 2. Error State
   if (error) {

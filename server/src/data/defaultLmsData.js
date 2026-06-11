@@ -91,7 +91,22 @@ export const DEFAULT_LMS_DATA = {
   //   ]
   // }
   academics: {
-    branches: [],
+    branches: [
+      {
+        id: 'iaac-airport',
+        name: 'IAAC Airport',
+        intakes: [
+          {
+            id: 'batch-08',
+            name: 'Batch 08',
+            batches: [
+              { id: 'batch-08-a', name: 'Batch A', studentCount: 0 },
+              { id: 'batch-08-b', name: 'Batch B', studentCount: 0 },
+            ],
+          },
+        ],
+      },
+    ],
     // Legacy faculty structure (keep for backward compatibility)
     faculties: [],
   },

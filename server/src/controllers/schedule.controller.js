@@ -32,6 +32,14 @@ function toScheduleItem(s) {
   };
 }
 
+function buildVisibilityFilter(user) {
+  const filter = {};
+  if (user?.batchId) filter.batchId = normalizeId(user.batchId);
+  if (user?.intakeId) filter.intakeId = normalizeId(user.intakeId);
+  if (user?.branchId) filter.branchId = normalizeId(user.branchId);
+  return filter;
+}
+
 async function resolveAdminIdentity(adminAuth) {
   const id = normalizeId(adminAuth?.sub || adminAuth?.id);
   if (!id) return { id: '', name: 'Admin', role: 'staff' };
@@ -203,13 +211,13 @@ export async function getMySchedule(req, res, next) {
       branchId = student.branchId;
     }
 
-    if (!batchId) {
+    const filter = batchId
+      ? { batchId: normalizeId(batchId), ...(intakeId ? { intakeId: normalizeId(intakeId) } : {}), ...(branchId ? { branchId: normalizeId(branchId) } : {}) }
+      : buildVisibilityFilter({ batchId, intakeId, branchId });
+
+    if (!filter.batchId && !filter.intakeId && !filter.branchId) {
       return res.json({ schedules: [] });
     }
-
-    const filter = { batchId: normalizeId(batchId) };
-    if (intakeId) filter.intakeId = normalizeId(intakeId);
-    if (branchId) filter.branchId = normalizeId(branchId);
 
     const items = await Schedule.find(filter).sort({ date: 1, startTime: 1 }).lean();
     res.json({ schedules: items.map(toScheduleItem) });

@@ -73,8 +73,8 @@ export default function MaterialsPage() {
         document.body.removeChild(link);
       }
     } catch (err) {
-      console.error('Download failed:', err);
-      alert('Download failed: ' + (err.message || 'Unknown error'));
+      globalThis.console.error('Download failed:', err);
+      globalThis.alert('Download failed: ' + (err.message || 'Unknown error'));
     } finally {
       setDownloading(prev => ({ ...prev, [materialId]: false }));
     }

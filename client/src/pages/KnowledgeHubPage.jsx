@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react';
 import { FileText, Link as LinkIcon, Video, StickyNote, Download, ExternalLink, Image as ImageIcon } from 'lucide-react';
 import { apiGet } from '../api/http.js';
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
-
 const TYPE_ICON = {
   file: FileText,
   link: LinkIcon,
@@ -23,7 +21,8 @@ const TYPE_COLOR = {
 
 function mediaUrl(value) {
   if (!value) return '';
-  return `${API_BASE}/${String(value).replace(/^\/+/, '')}`;
+  if (/^https?:\/\//i.test(String(value))) return String(value);
+  return `/${String(value).replace(/^\/+/, '')}`;
 }
 
 export default function KnowledgeHubPage() {
@@ -88,7 +87,7 @@ export default function KnowledgeHubPage() {
                     {/* File: download */}
                     {item.resourceType === 'file' && (
                       <a
-                        href={`${API_BASE}/api/knowledge-hub/download/${item.id}`}
+                        href={item.downloadUrl || mediaUrl(`api/knowledge-hub/download/${item.id}`)}
                         className="mt-2 flex w-fit items-center gap-1 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200"
                       >
                         <Download size={12} />{item.fileName || 'Download'}

@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Image as ImageIcon, Plus, Trash2, Upload, X } from 'lucide-react';
-import { apiDelete, apiGet } from '../../api/http.js';
+import { apiDelete, apiGet, getApiBaseUrl } from '../../api/http.js';
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
-
-function mediaUrl(value) {
+function mediaUrl(value, base = '') {
   if (!value) return '';
-  return `${API_BASE}/${String(value).replace(/^\/+/, '')}`;
+  return `${base}/${String(value).replace(/^\/+/, '')}`;
 }
 
 function fileLabel(files) {
@@ -33,6 +31,7 @@ export default function AdminKnowledgeHubPage() {
   const [formErr, setFormErr] = useState('');
   const [saving, setSaving] = useState(false);
   const fileRef = useRef(null);
+  const [apiBase, setApiBase] = useState(import.meta.env.VITE_API_URL || '');
 
   const loadItems = () => {
     setLoading(true);
@@ -48,6 +47,19 @@ export default function AdminKnowledgeHubPage() {
     apiGet('/api/materials/hierarchy')
       .then((data) => setBranches(Array.isArray(data?.branches) ? data.branches : []))
       .catch(() => setBranches([]));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getApiBaseUrl()
+      .then((base) => {
+        if (!cancelled) setApiBase(base);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -99,10 +111,10 @@ export default function AdminKnowledgeHubPage() {
   }, [selectedBranch, selectedIntake]);
 
   useEffect(() => {
-    const next = images.map((file) => URL.createObjectURL(file));
+    const next = images.map((file) => globalThis.URL.createObjectURL(file));
     setPreviewUrls(next);
     return () => {
-      next.forEach((url) => URL.revokeObjectURL(url));
+      next.forEach((url) => globalThis.URL.revokeObjectURL(url));
     };
   }, [images]);
 
@@ -135,7 +147,8 @@ export default function AdminKnowledgeHubPage() {
     setFormErr('');
 
     try {
-      const formData = new FormData();
+      const apiOrigin = apiBase || (await getApiBaseUrl());
+      const formData = new globalThis.FormData();
       formData.append('resourceType', 'gallery');
       formData.append('branchId', selectedBranch);
       formData.append('intakeId', selectedIntake);
@@ -144,7 +157,7 @@ export default function AdminKnowledgeHubPage() {
       formData.append('description', description.trim());
       images.forEach((file) => formData.append('images', file));
 
-      const response = await fetch(`${API_BASE}/api/admin/knowledge-hub`, {
+      const response = await fetch(`${apiOrigin}/api/admin/knowledge-hub`, {
         method: 'POST',
         body: formData,
         credentials: 'include',
@@ -171,7 +184,7 @@ export default function AdminKnowledgeHubPage() {
       await apiDelete(`/api/admin/knowledge-hub/${id}`);
       loadItems();
     } catch (err) {
-      alert(err?.message || 'Failed to delete post');
+      globalThis.alert(err?.message || 'Failed to delete post');
     }
   };
 
@@ -316,7 +329,7 @@ export default function AdminKnowledgeHubPage() {
                     {item.imagePaths.slice(0, 4).map((imagePath, index) => (
                       <img
                         key={`${item.id}-${index}`}
-                        src={mediaUrl(imagePath)}
+                        src={mediaUrl(imagePath, apiBase || import.meta.env.VITE_API_URL || '')}
                         alt={item.imageNames?.[index] || `${item.title} ${index + 1}`}
                         className="h-40 w-full object-cover"
                       />

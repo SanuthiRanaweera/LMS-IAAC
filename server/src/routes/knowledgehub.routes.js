@@ -6,6 +6,7 @@ import { requireAuth, requireLecturer } from '../middleware/auth.js';
 import {
   listMyHubItems,
   studentDownloadResource,
+  streamHubImage,
   lecturerAddHubItem,
   lecturerDeleteHubItem,
   adminListHubItems,
@@ -31,6 +32,7 @@ export const knowledgeHubAdminRouter = Router();
 // ─── Student + Lecturer routes ────────────────────────────────────────────────
 knowledgeHubRouter.get('/', requireAuth, listMyHubItems);
 knowledgeHubRouter.get('/download/:id', requireAuth, studentDownloadResource);
+knowledgeHubRouter.get('/media/:id/:index', streamHubImage);
 
 // ─── Lecturer-only routes ─────────────────────────────────────────────────────
 knowledgeHubRouter.post('/lecturer', requireAuth, requireLecturer, hubUpload.single('file'), lecturerAddHubItem);
