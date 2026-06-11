@@ -1,6 +1,7 @@
 import {
   BookOpen,
   Calendar,
+  FileText,
   LayoutDashboard,
   Users,
   GraduationCap,
@@ -15,6 +16,7 @@ const NAV = [
   { label: 'Students', to: '/admin/students', icon: GraduationCap },
   { label: 'Course Overview', to: '/admin/course-overview', icon: BookOpen, superAdminOnly: true },
   { label: 'Class Schedule', to: '/admin/schedule', icon: Calendar },
+  { label: 'Study Materials', to: '/admin/materials/upload', icon: FileText },
   { label: 'Recordings', to: '/admin/recordings', icon: Video, superAdminOnly: true },
   { label: 'Knowledge Hub', to: '/admin/knowledge-hub', icon: Library, superAdminOnly: true },
   { label: 'Feedback', to: '/admin/feedback', icon: Library, superAdminOnly: true },

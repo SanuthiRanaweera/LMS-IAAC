@@ -336,7 +336,13 @@ export async function verifyAndRegisterStudent(req, res, next) {
 
     await Otp.deleteOne({ email: normalizedEmail });
 
-    const token = signAuthToken({ sub: String(created._id) });
+    const token = signAuthToken({
+      sub: String(created._id),
+      role: 'student',
+      branchId: created.branchId || '',
+      batchId: created.batchId || '',
+      course: created.course || '',
+    });
     setAuthCookie(res, token);
 
     return res.status(201).json({ student: toMePayload(created) });
@@ -413,7 +419,13 @@ export async function registerWithoutOtp(req, res, next) {
       createdBy: 'self',
     });
 
-    const token = signAuthToken({ sub: String(created._id) });
+    const token = signAuthToken({
+      sub: String(created._id),
+      role: 'student',
+      branchId: created.branchId || '',
+      batchId: created.batchId || '',
+      course: created.course || '',
+    });
     setAuthCookie(res, token);
 
     return res.status(201).json({ student: toMePayload(created) });
@@ -554,7 +566,13 @@ export async function loginStudent(req, res, next) {
       const ok = await bcrypt.compare(password.trim(), student.passwordHash);
       if (!ok) return res.status(401).json({ message: 'Invalid credentials' });
 
-      const token = signAuthToken({ sub: String(student._id), role: 'student' });
+      const token = signAuthToken({
+        sub: String(student._id),
+        role: 'student',
+        branchId: student.branchId || '',
+        batchId: student.batchId || '',
+        course: student.course || '',
+      });
       setAuthCookie(res, token);
       return res.json({ student: toMePayload(student) });
     }
@@ -647,7 +665,13 @@ export async function resetStudentPassword(req, res, next) {
     await student.save();
 
     // Auto sign-in after reset for better UX.
-    const authToken = signAuthToken({ sub: String(student._id), role: 'student' });
+    const authToken = signAuthToken({
+      sub: String(student._id),
+      role: 'student',
+      branchId: student.branchId || '',
+      batchId: student.batchId || '',
+      course: student.course || '',
+    });
     setAuthCookie(res, authToken);
     return res.json({ student: toMePayload(student) });
   } catch (err) {

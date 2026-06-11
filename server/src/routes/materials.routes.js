@@ -2,7 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import { requirePermission } from '../middleware/adminAuth.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requireStudent } from '../middleware/auth.js';
 import {
   getAcademicHierarchy,
   getBranches,
@@ -83,8 +83,8 @@ materialsRouter.get(
 );
 
 // Student endpoints (require student auth)
-materialsRouter.get('/student', requireAuth, getStudentMaterials);
-materialsRouter.get('/student/download/:materialId', requireAuth, downloadMaterial);
-materialsRouter.get('/student/download/:materialId/content', requireAuth, streamStudentMaterialContent);
+materialsRouter.get('/student', requireAuth, requireStudent, getStudentMaterials);
+materialsRouter.get('/student/download/:materialId', requireAuth, requireStudent, downloadMaterial);
+materialsRouter.get('/student/download/:materialId/content', requireAuth, requireStudent, streamStudentMaterialContent);
 
 export default materialsRouter;

@@ -44,7 +44,7 @@ export default function MaterialsPage() {
   useEffect(() => {
     let cancelled = false;
 
-    apiGet('/api/materials/student')
+    apiGet('/api/student/materials')
       .then((json) => {
         if (!cancelled) setData(json);
       })
@@ -104,6 +104,9 @@ export default function MaterialsPage() {
   }
 
   const materials = Array.isArray(data?.materials) ? data.materials : [];
+  const materialsByWeek = Array.isArray(data?.materialsByWeek)
+    ? data.materialsByWeek
+    : [];
 
   return (
     <CardShell title="Study Materials">
@@ -122,34 +125,22 @@ export default function MaterialsPage() {
           <FileText size={48} className="text-slate-300 mx-auto mb-3" />
           <div className="text-sm text-slate-600 mb-2">No study materials available yet</div>
           <div className="text-xs text-slate-500">
-            Your instructors will upload course materials organized by branch, intake, and batch here
+            Your instructors will upload course materials organized by branch, batch, course, and week here
           </div>
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Group materials by branch if multiple branches exist */}
-          {(() => {
-            const materialsByBranch = materials.reduce((acc, material) => {
-              const branchName = material.branchName || 'General';
-              if (!acc[branchName]) acc[branchName] = [];
-              acc[branchName].push(material);
-              return acc;
-            }, {});
-            
-            const branchNames = Object.keys(materialsByBranch);
-            const showBranchHeaders = branchNames.length > 1;
-            
-            return branchNames.map((branchName) => (
-              <div key={branchName}>
-                {showBranchHeaders && (
-                  <div className="mb-3">
-                    <h3 className="text-sm font-semibold text-slate-700 border-b border-slate-200 pb-1">
-                      {branchName}
-                    </h3>
-                  </div>
-                )}
-                <div className="space-y-3">
-                  {materialsByBranch[branchName].map((material) => (
+          {(materialsByWeek.length > 0 ? materialsByWeek : [{ weekNumber: null, items: materials }]).map((group) => (
+            <div key={group.weekNumber ?? 'all'}>
+              {group.weekNumber ? (
+                <div className="mb-3">
+                  <h3 className="text-sm font-semibold text-slate-700 border-b border-slate-200 pb-1">
+                    Week {group.weekNumber}
+                  </h3>
+                </div>
+              ) : null}
+              <div className="space-y-3">
+                {group.items.map((material) => (
                     <div
                       key={material.id}
                       className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 p-4 hover:bg-slate-50 transition-colors"
@@ -201,8 +192,13 @@ export default function MaterialsPage() {
                             </div>
                           )}
                           
-                          {(material.week || material.module) && (
+                          {(material.weekNumber || material.week || material.module) && (
                             <div className="mt-2">
+                              {material.weekNumber && (
+                                <span className="inline-block px-2 py-1 bg-indigo-100 text-indigo-700 text-xs font-semibold rounded mr-2">
+                                  Week {material.weekNumber}
+                                </span>
+                              )}
                               {material.week && (
                                 <span className="inline-block px-2 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded">
                                   Week {material.week}
@@ -237,10 +233,9 @@ export default function MaterialsPage() {
                       </button>
                     </div>
                   ))}
-                </div>
               </div>
-            ));
-          })()}
+            </div>
+          ))}
         </div>
       )}
     </CardShell>

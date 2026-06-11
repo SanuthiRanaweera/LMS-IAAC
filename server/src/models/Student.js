@@ -2,6 +2,13 @@ import mongoose from 'mongoose';
 
 const { Schema } = mongoose;
 
+const STUDENT_COURSES = [
+  'Cabin Crew',
+  'Ground Operations',
+  'Ticketing & Reservations',
+  'Air Cargo',
+];
+
 const StudentSchema = new Schema(
   {
     fullName: { type: String, required: true, trim: true, maxlength: 120 },
@@ -17,7 +24,7 @@ const StudentSchema = new Schema(
     studentId: { type: String, required: true, trim: true, maxlength: 40, unique: true, index: true },
 
     nic: { type: String, trim: true, maxlength: 40 },
-    course: { type: String, trim: true, maxlength: 120 },
+    course: { type: String, trim: true, enum: STUDENT_COURSES, index: true },
 
     whatsappNumber: { type: String, trim: true, maxlength: 30 },
     phoneNumber: { type: String, trim: true, maxlength: 30 },

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import mongoose from 'mongoose';
-import { Material } from '../models/Material.js';
+import { Material, STUDY_MATERIAL_COURSES } from '../models/Material.js';
 import { Student } from '../models/Student.js';
 import { DEFAULT_LMS_DATA } from '../data/defaultLmsData.js';
 import { getOrCreateAppDataPayload } from '../services/appData.service.js';
@@ -20,6 +20,18 @@ function normalizeId(value) {
 
 function normalizeName(value) {
   return typeof value === 'string' ? value : '';
+}
+
+function canonicalCourse(value) {
+  const v = String(value || '').trim().toLowerCase();
+  if (!v) return '';
+  if (v === 'cabin crew') return 'Cabin Crew';
+  if (v === 'ground operations' || v === 'ground ops') return 'Ground Operations';
+  if (v === 'ticketing & reservations' || v === 'ticketing and reservations' || v === 'ticketing') {
+    return 'Ticketing & Reservations';
+  }
+  if (v === 'air cargo') return 'Air Cargo';
+  return String(value || '').trim();
 }
 
 function buildAbsoluteUrl(req, value) {
@@ -74,12 +86,13 @@ async function getAuthorizedStudentMaterial(materialId, studentId) {
 
   if (
     material.branchId !== student.branchId ||
-    material.intakeId !== student.intakeId ||
-    material.batchId !== student.batchId
+    material.batchId !== student.batchId ||
+    (material.course && canonicalCourse(material.course) !== canonicalCourse(student.course)) ||
+    (material.intakeId && student.intakeId && material.intakeId !== student.intakeId)
   ) {
     return {
       status: 403,
-      body: { message: 'Access denied. This material is not available for your batch.' },
+      body: { message: 'Access denied. This material is not available for your enrollment.' },
     };
   }
 
@@ -121,19 +134,25 @@ function validateMaterialTitle(title) {
 }
 
 function validateUploadFields(body) {
-  const { branchId, intakeId, batchId, title } = body;
+  const { branchId, batchId, title, course, weekNumber } = body;
   const errors = [];
   
   if (!branchId?.trim()) {
     errors.push('Please select a branch');
   }
   
-  if (!intakeId?.trim()) {
-    errors.push('Please select an intake');
-  }
-  
   if (!batchId?.trim()) {
     errors.push('Please select a batch');
+  }
+
+  const normalizedCourse = canonicalCourse(course);
+  if (!normalizedCourse || !STUDY_MATERIAL_COURSES.includes(normalizedCourse)) {
+    errors.push(`Please select a valid course: ${STUDY_MATERIAL_COURSES.join(', ')}`);
+  }
+
+  const parsedWeek = Number.parseInt(weekNumber, 10);
+  if (!Number.isInteger(parsedWeek) || parsedWeek < 1 || parsedWeek > 52) {
+    errors.push('Please provide a valid week number between 1 and 52');
   }
   
   const titleValidation = validateMaterialTitle(title);
@@ -241,7 +260,7 @@ export async function getBatches(req, res, next) {
 // Upload material (admin only)
 export async function uploadMaterial(req, res, next) {
   try {
-    const { branchId, intakeId, batchId, title, description, category } = req.body;
+    const { branchId, intakeId, batchId, title, description, category, course, weekNumber, content } = req.body;
     const adminAuth = req.adminAuth;
     
     // Validate required fields
@@ -253,15 +272,16 @@ export async function uploadMaterial(req, res, next) {
       });
     }
     
-    // Check if file was uploaded (this would be handled by multer middleware)
-    if (!req.file) {
-      return res.status(400).json({ message: 'Please select a file to upload' });
+    // Allow either a file upload or link/text content.
+    if (!req.file && !String(content || '').trim()) {
+      return res.status(400).json({ message: 'Please upload a file or provide material content/link' });
     }
     
     // Extract week/module number from title for categorization
-    const weekMatch = title.match(/Week\s+(\d+)/i);
+    const parsedWeekNumber = Number.parseInt(weekNumber, 10);
+    const normalizedCourse = canonicalCourse(course);
     const moduleMatch = title.match(/Module\s+(\d+)/i);
-    const isImageUpload = String(req.file.mimetype || '').startsWith('image/');
+    const isImageUpload = Boolean(req.file) && String(req.file.mimetype || '').startsWith('image/');
     let imageAssetId = '';
     
     try {
@@ -270,7 +290,7 @@ export async function uploadMaterial(req, res, next) {
           scope: 'materials',
           title: title.trim(),
           branchId: branchId.trim(),
-          intakeId: intakeId.trim(),
+          intakeId: intakeId?.trim() || '',
           batchId: batchId.trim(),
         });
       }
@@ -278,19 +298,24 @@ export async function uploadMaterial(req, res, next) {
       // Create material record
       const material = new Material({
         branchId: branchId.trim(),
-        intakeId: intakeId.trim(),
+        intakeId: intakeId?.trim() || '',
         batchId: batchId.trim(),
+        course: normalizedCourse,
+        weekNumber: parsedWeekNumber,
         title: title.trim(),
         description: description?.trim() || '',
-        fileName: req.file.originalname,
-        fileUrl: isImageUpload ? 'api/materials/student/download/content/pending' : (req.file.path || req.file.filename),
+        content: String(content || '').trim(),
+        fileName: req.file?.originalname || `${title.trim()}.link`,
+        fileUrl: req.file
+          ? (isImageUpload ? 'api/materials/student/download/content/pending' : (req.file.path || req.file.filename))
+          : '',
         imageAssetId,
-        fileSize: req.file.size,
-        fileType: req.file.mimetype,
+        fileSize: req.file?.size,
+        fileType: req.file?.mimetype || 'text/link',
         uploadedBy: adminAuth.id,
         uploadedByName: adminAuth.name || 'Admin',
         category: category?.trim() || 'Study Material',
-        week: weekMatch ? parseInt(weekMatch[1]) : null,
+        week: parsedWeekNumber,
         module: moduleMatch ? parseInt(moduleMatch[1]) : null,
       });
 
@@ -301,9 +326,11 @@ export async function uploadMaterial(req, res, next) {
         materialId: saved._id,
         title: title.trim(),
         branchId,
-        intakeId,
         batchId,
-        fileSize: req.file.size,
+        intakeId: intakeId?.trim() || '',
+        course: normalizedCourse,
+        weekNumber: parsedWeekNumber,
+        fileSize: req.file?.size || 0,
         storedInMongo: isImageUpload,
       });
 
@@ -315,6 +342,8 @@ export async function uploadMaterial(req, res, next) {
           fileName: saved.fileName,
           fileSize: saved.fileSize,
           fileType: saved.fileType,
+          course: saved.course,
+          weekNumber: saved.weekNumber,
           uploadedAt: saved.createdAt,
         }
       });
@@ -338,23 +367,25 @@ export async function uploadMaterial(req, res, next) {
 // Get materials for students (filtered by their batch)
 export async function getStudentMaterials(req, res, next) {
   try {
-    // Get current student from auth
     const studentId = req.auth?.sub;
     if (!studentId) {
       return res.status(401).json({ message: 'Student authentication required' });
     }
-    
-    // Find student to get their batch info
+
     const student = await Student.findById(studentId).lean();
     if (!student) {
       return res.status(404).json({ message: 'Student not found' });
     }
-    
-    // Check if student has batch assignment
-    if (!student.branchId || !student.intakeId || !student.batchId) {
+
+    const effectiveBranchId = String(req.auth?.branchId || student.branchId || '').trim();
+    const effectiveBatchId = String(req.auth?.batchId || student.batchId || '').trim();
+    const effectiveCourse = canonicalCourse(req.auth?.course || student.course || '');
+
+    if (!effectiveBranchId || !effectiveBatchId || !effectiveCourse) {
       return res.json({ 
         materials: [], 
-        message: 'You have not been assigned to a batch yet. Please contact administration.' 
+        materialsByWeek: [],
+        message: 'Your enrollment is incomplete (branch, batch, or course). Please contact administration.' 
       });
     }
 
@@ -363,9 +394,9 @@ export async function getStudentMaterials(req, res, next) {
     const branches = Array.isArray(payload?.branches) ? payload.branches : [];
     
     // Find the branch, intake, and batch names
-    const branch = branches.find(b => b.id === student.branchId);
+    const branch = branches.find(b => b.id === effectiveBranchId);
     const intake = branch?.intakes?.find(i => i.id === student.intakeId);
-    const batch = intake?.batches?.find(b => b.id === student.batchId);
+    const batch = intake?.batches?.find(b => b.id === effectiveBatchId);
     
     const branchName = branch?.name || 'Unknown Branch';
     const intakeName = intake?.name || 'Unknown Intake';
@@ -373,36 +404,59 @@ export async function getStudentMaterials(req, res, next) {
     
     // Get materials for student's batch
     const materials = await Material.find({
-      branchId: student.branchId,
-      intakeId: student.intakeId,
-      batchId: student.batchId,
+      branchId: effectiveBranchId,
+      batchId: effectiveBatchId,
+      course: effectiveCourse,
       isActive: true
     })
-    .sort({ createdAt: -1 })
-    .select('title description fileName fileType fileSize createdAt category week module downloadCount')
+    .sort({ weekNumber: 1, createdAt: -1 })
+    .select('title description fileName fileType fileSize createdAt category week module weekNumber course content downloadCount')
     .lean();
+
+    const mapped = materials.map(material => ({
+      id: material._id,
+      title: material.title,
+      description: material.description,
+      fileName: material.fileName,
+      fileType: material.fileType,
+      fileSize: material.fileSize,
+      uploadedAt: material.createdAt,
+      category: material.category,
+      week: material.week,
+      weekNumber: material.weekNumber,
+      module: material.module,
+      course: material.course,
+      content: material.content,
+      downloadCount: material.downloadCount,
+      branchName,
+      intakeName,
+      batchName,
+      branchId: effectiveBranchId,
+      intakeId: student.intakeId || '',
+      batchId: effectiveBatchId,
+    }));
+
+    const materialsByWeekMap = new Map();
+    for (const item of mapped) {
+      const key = Number(item.weekNumber) || 0;
+      if (!materialsByWeekMap.has(key)) {
+        materialsByWeekMap.set(key, []);
+      }
+      materialsByWeekMap.get(key).push(item);
+    }
+
+    const materialsByWeek = Array.from(materialsByWeekMap.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([weekNumber, items]) => ({ weekNumber, items }));
     
     res.json({ 
-      materials: materials.map(material => ({
-        id: material._id,
-        title: material.title,
-        description: material.description,
-        fileName: material.fileName,
-        fileType: material.fileType,
-        fileSize: material.fileSize,
-        uploadedAt: material.createdAt,
-        category: material.category,
-        week: material.week,
-        module: material.module,
-        downloadCount: material.downloadCount,
-        // Add branch hierarchy information
-        branchName: branchName,
-        intakeName: intakeName,
-        batchName: batchName,
-        branchId: student.branchId,
-        intakeId: student.intakeId,
-        batchId: student.batchId
-      }))
+      materials: mapped,
+      materialsByWeek,
+      filters: {
+        branchId: effectiveBranchId,
+        batchId: effectiveBatchId,
+        course: effectiveCourse,
+      },
     });
     
   } catch (err) {
@@ -507,6 +561,8 @@ export async function getAdminMaterials(req, res, next) {
         branchId: material.branchId,
         intakeId: material.intakeId,
         batchId: material.batchId,
+        course: material.course || '',
+        weekNumber: material.weekNumber || null,
         uploadedBy: material.uploadedByName,
         uploadedAt: material.createdAt,
         downloadCount: material.downloadCount,

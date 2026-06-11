@@ -17,6 +17,7 @@ import { adminRouter } from './routes/admin.routes.js';
 import { entitiesRouter } from './routes/entities.routes.js';
 import { lmsRouter } from './routes/lms.routes.js';
 import materialsRouter from './routes/materials.routes.js';
+import { studyMaterialsRouter } from './routes/studyMaterials.routes.js';
 import { scheduleRouter, scheduleAdminRouter } from './routes/schedule.routes.js';
 import { recordingsRouter, recordingsAdminRouter } from './routes/recordings.routes.js';
 import { knowledgeHubRouter, knowledgeHubAdminRouter } from './routes/knowledgehub.routes.js';
@@ -95,6 +96,7 @@ export function createServer() {
 
   // Materials management (branch-intake-batch hierarchy)
   app.use('/api/materials', materialsRouter);
+  app.use('/api', studyMaterialsRouter);
 
   // Schedule, Recordings, Knowledge Hub — student & lecturer access
   app.use('/api/schedule', scheduleRouter);
