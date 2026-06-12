@@ -43,6 +43,36 @@ The dev runner also passes the chosen API URL to the Vite client via `VITE_API_B
 - If `MONGODB_URI` is missing (or Mongo is down), the API still starts for early development and will log a warning.
 - To force the API to fail fast when Mongo is unavailable, set `MONGODB_REQUIRED=true` in `server/.env`.
 
+## Docker
+
+Root deployment files are provided for containerized frontend and backend runs:
+
+- `Dockerfile.backend`
+- `Dockerfile.frontend`
+- `docker-compose.yml`
+- `docker-compose.prod.yml`
+- `nginx.conf`
+- `nginx-ssl.conf`
+- `deploy.sh`
+
+Development-style container run:
+
+```bash
+docker compose -f docker-compose.yml up -d --build
+```
+
+Production-style container run with SSL nginx config:
+
+```bash
+./deploy.sh
+```
+
+Notes:
+
+- `server/.env` is loaded into the backend container via `env_file`.
+- The frontend is built with `VITE_API_BASE_URL=/api`, and nginx proxies `/api` and `/uploads` to the backend service.
+- For SSL mode, place certificates at `./ssl/fullchain.pem` and `./ssl/privkey.pem`.
+
 ## Suggested backend modules (next)
 
 Inside `server/src/` you already have folders for:

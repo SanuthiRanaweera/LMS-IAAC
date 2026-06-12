@@ -1,0 +1,19 @@
+services:
+  backend:
+    env_file:
+      - ./server/.env
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      MONGODB_REQUIRED: "true"
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN}
+    restart: always
+
+  frontend:
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx-ssl.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
