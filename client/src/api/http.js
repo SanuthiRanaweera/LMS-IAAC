@@ -5,10 +5,17 @@ function envBaseUrl() {
   const v = import.meta.env.VITE_API_BASE_URL;
   if (typeof v !== 'string' || !v.trim()) return null;
 
-  return v
-    .trim()
-    .replace(/\/$/, '')
-    .replace(/\/api$/, '');
+  const normalized = v.trim().replace(/\/$/, '');
+
+  if (normalized === '/api') {
+    return normalized;
+  }
+
+  if (/^https?:\/\//i.test(normalized)) {
+    return normalized.replace(/\/api$/, '');
+  }
+
+  return normalized;
 }
 
 async function canReachApi(baseUrl, { timeoutMs = 800 } = {}) {
@@ -110,11 +117,27 @@ function networkErrorMessage(baseUrl) {
   return `Can't connect to the server (${baseUrl}). Please make sure the backend is running and try again.`;
 }
 
+function buildRequestUrl(baseUrl, path) {
+  const normalizedBaseUrl = String(baseUrl || '').replace(/\/$/, '');
+  const normalizedPath = String(path || '').startsWith('/') ? String(path) : `/${String(path || '')}`;
+
+  if (normalizedBaseUrl.endsWith('/api') && normalizedPath === '/api') {
+    return normalizedBaseUrl;
+  }
+
+  if (normalizedBaseUrl.endsWith('/api') && normalizedPath.startsWith('/api/')) {
+    return `${normalizedBaseUrl}${normalizedPath.slice(4)}`;
+  }
+
+  return `${normalizedBaseUrl}${normalizedPath}`;
+}
+
 export async function apiGet(path) {
   const baseUrl = await resolveApiBaseUrl();
+  const requestUrl = buildRequestUrl(baseUrl, path);
   let res;
   try {
-    res = await fetch(`${baseUrl}${path}`, { credentials: 'include', cache: 'no-store' });
+    res = await fetch(requestUrl, { credentials: 'include', cache: 'no-store' });
   } catch {
     throw new ApiError(networkErrorMessage(baseUrl), 0);
   }
@@ -124,9 +147,10 @@ export async function apiGet(path) {
 
 export async function apiPost(path, body) {
   const baseUrl = await resolveApiBaseUrl();
+  const requestUrl = buildRequestUrl(baseUrl, path);
   let res;
   try {
-    res = await fetch(`${baseUrl}${path}`, {
+    res = await fetch(requestUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -141,9 +165,10 @@ export async function apiPost(path, body) {
 
 export async function apiPut(path, body) {
   const baseUrl = await resolveApiBaseUrl();
+  const requestUrl = buildRequestUrl(baseUrl, path);
   let res;
   try {
-    res = await fetch(`${baseUrl}${path}`, {
+    res = await fetch(requestUrl, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -158,9 +183,10 @@ export async function apiPut(path, body) {
 
 export async function apiPatch(path, body) {
   const baseUrl = await resolveApiBaseUrl();
+  const requestUrl = buildRequestUrl(baseUrl, path);
   let res;
   try {
-    res = await fetch(`${baseUrl}${path}`, {
+    res = await fetch(requestUrl, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -175,9 +201,10 @@ export async function apiPatch(path, body) {
 
 export async function apiDelete(path) {
   const baseUrl = await resolveApiBaseUrl();
+  const requestUrl = buildRequestUrl(baseUrl, path);
   let res;
   try {
-    res = await fetch(`${baseUrl}${path}`, {
+    res = await fetch(requestUrl, {
       method: 'DELETE',
       credentials: 'include',
     });
