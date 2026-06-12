@@ -1,13 +1,13 @@
 #!/bin/bash
 # ============================================
-# IAAC Website - Ubuntu Server Deployment Script
+# IAAC LMS - Ubuntu Server Deployment Script
 # Domain: iaaccampus.com
 # ============================================
 
 set -e
 
 echo "================================================"
-echo "IAAC Website - Production Deployment"
+echo "IAAC LMS - Production Deployment"
 echo "Domain: iaaccampus.com"
 echo "================================================"
 
