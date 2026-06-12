@@ -2,6 +2,7 @@ import {
   LayoutDashboard, 
   Library, 
   Calendar, 
+  FileText,
   Video, 
   Bell, 
   LogOut 
@@ -12,6 +13,7 @@ import logo from '../image/logo.png';
 const NAV_LINKS = [
   { label: 'Dashboard', icon: LayoutDashboard, to: '/dashboard' },
   { label: 'Knowledge Hub', icon: Library, to: '/knowledge-hub' },
+  { label: 'Materials', icon: FileText, to: '/materials' },
   { label: 'Class Schedule', icon: Calendar, to: '/schedule' },
   { label: 'Recordings', icon: Video, to: '/recordings' },
   { label: 'My Feedback', icon: Bell, to: '/feedback' },
@@ -49,16 +51,23 @@ export default function TopNavbar({ student, onLogout }) {
 
           {/* 3. Utility Actions (Notifications & Profile) */}
           <div className="flex items-center gap-4 pl-8">
-            <button className="relative p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors">
-              <Bell className="h-5 w-5" />
-              <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 border-2 border-white"></span>
+            <button
+              type="button"
+              aria-label="Notifications"
+              className="relative inline-flex items-center gap-2 rounded-full border border-sky-100 bg-sky-50 px-3 py-2 text-sky-800 shadow-sm transition-colors hover:bg-sky-100"
+            >
+              <span className="relative inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-sky-700">
+                <Bell className="h-5 w-5" />
+                <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-rose-500"></span>
+              </span>
+              <span className="hidden text-sm font-semibold md:inline">Notifications</span>
             </button>
 
             {/* Profile Section */}
             <div className="flex items-center gap-3 border-l border-slate-200 pl-4 py-1">
               <div className="text-right hidden md:block">
                 <NavLink to="/profile" className="text-xs font-bold text-slate-900 hover:underline">
-                  {student?.name || 'Dilan Augustine'}
+                  {student?.name || ' User '}
                 </NavLink>
                 <button
                   type="button"
@@ -74,10 +83,14 @@ export default function TopNavbar({ student, onLogout }) {
                 aria-label="Open profile"
               >
                 <img 
-                  src={student?.avatarDataUri || student?.avatar || "https://ui-avatars.com/api/?name=Dilan+Augustine&background=0369a1&color=fff"} 
-                  className="h-full w-full rounded-full object-cover"
-                  alt="Profile"
-                />
+                  src={
+                      student?.avatarDataUri || 
+                      student?.avatar || 
+                      `https://ui-avatars.com/api/?name=${encodeURIComponent(student?.name || 'User')}&background=0369a1&color=fff`
+                   }  
+                    className="h-full w-full rounded-full object-cover"
+                    alt="Profile"
+                  />
               </NavLink>
             </div>
           </div>

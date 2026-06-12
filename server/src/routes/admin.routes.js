@@ -12,6 +12,7 @@ import {
   listAdminUsers,
   listAppDataKeys,
   listStudents,
+  updateStudentByAdmin,
   upsertAppDataByKey,
 } from '../controllers/admin.controller.js';
 import {
@@ -35,6 +36,7 @@ adminRouter.delete('/users/:id', requirePermission('DELETE_STAFF_ADMIN'), delete
 adminRouter.get('/students', requirePermission('VIEW_STUDENTS'), listStudents);
 adminRouter.get('/students/:id', requirePermission('VIEW_STUDENTS'), getStudentById);
 adminRouter.post('/students', requirePermission('CREATE_STUDENT'), createStudentByAdmin);
+adminRouter.put('/students/:id', requirePermission('EDIT_STUDENT'), updateStudentByAdmin);
 adminRouter.delete('/students/:id', requirePermission('DELETE_STUDENT'), deleteStudentByAdmin);
 
 // App data management with enhanced permissions

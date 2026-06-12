@@ -13,6 +13,7 @@ const RecordingSchema = new Schema(
 
     // Either a stored file OR an external video link
     filePath:  { type: String, trim: true, maxlength: 500, default: '' }, // relative server path
+    fileAssetId: { type: String, trim: true, maxlength: 64, default: '' },
     fileName:  { type: String, trim: true, maxlength: 255, default: '' },
     fileSize:  { type: Number, default: 0 },
     fileMime:  { type: String, trim: true, maxlength: 100, default: '' },

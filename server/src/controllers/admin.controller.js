@@ -1,15 +1,37 @@
 import bcrypt from 'bcryptjs';
 import { AppData } from '../models/AppData.js';
+import { Material } from '../models/Material.js';
 import { Student } from '../models/Student.js';
 import { Admin } from '../models/Admin.js';
 import { logAdminAction } from '../middleware/adminAuth.js';
+import { DEFAULT_LMS_DATA } from '../data/defaultLmsData.js';
+import { getOrCreateAppDataPayload } from '../services/appData.service.js';
 
 function safeTrim(v) {
   return typeof v === 'string' ? v.trim() : '';
 }
 
+function normalizeId(value) {
+  if (value == null) return '';
+  return String(value);
+}
+
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
+}
+
+function canonicalCourse(value) {
+  const v = String(value || '').trim().toLowerCase();
+  if (!v) return '';
+  if (v === 'cabin crew' || v === 'cabin' || v === 'crew') return 'Cabin Crew';
+  if (v === 'ground operations' || v === 'ground ops' || v === 'ground operation' || v === 'ground') {
+    return 'Ground Operations';
+  }
+  if (v === 'ticketing & reservations' || v === 'ticketing and reservations' || v === 'ticketing' || v === 'reservations') {
+    return 'Ticketing & Reservations';
+  }
+  if (v === 'air cargo' || v === 'cargo') return 'Air Cargo';
+  return String(value || '').trim();
 }
 
 function isValidEmail(email) {
@@ -18,6 +40,58 @@ function isValidEmail(email) {
 
 function isSafeKey(key) {
   return typeof key === 'string' && /^[a-z0-9][a-z0-9._-]{0,63}$/i.test(key);
+}
+
+async function resolveStudentEnrollment(branchId, intakeId, batchId) {
+  const safeBranchId = safeTrim(branchId);
+  const safeIntakeId = safeTrim(intakeId);
+  const safeBatchId = safeTrim(batchId);
+
+  if (!safeBranchId && !safeIntakeId && !safeBatchId) {
+    return { branchId: '', intakeId: '', batchId: '' };
+  }
+
+  if (!safeBranchId || !safeIntakeId || !safeBatchId) {
+    return { error: 'Branch, intake, and batch are required for student enrollment' };
+  }
+
+  const payload = await getOrCreateAppDataPayload('academics', { branches: DEFAULT_LMS_DATA?.academics?.branches || [] });
+  const branches = Array.isArray(payload?.branches) ? payload.branches : [];
+
+  const branch = branches.find(
+    (item) => normalizeId(item?.id || item?._id || item?.key || item?.code || item?.name) === normalizeId(safeBranchId)
+  );
+  if (!branch) return { error: 'Invalid branch selection' };
+
+  const intakes = Array.isArray(branch?.intakes) ? branch.intakes : [];
+  const intake = intakes.find(
+    (item) => normalizeId(item?.id || item?._id || item?.key || item?.code || item?.name) === normalizeId(safeIntakeId)
+  );
+  if (!intake) return { error: 'Invalid intake selection' };
+
+  const batches = Array.isArray(intake?.batches) ? intake.batches : [];
+  if (batches.length === 0) {
+    return {
+      branchId: safeBranchId,
+      intakeId: safeIntakeId,
+      batchId: '',
+    };
+  }
+
+  if (!safeBatchId) {
+    return { error: 'Batch is required for the selected intake' };
+  }
+
+  const batch = batches.find(
+    (item) => normalizeId(item?.id || item?._id || item?.key || item?.code || item?.name) === normalizeId(safeBatchId)
+  );
+  if (!batch) return { error: 'Invalid batch selection' };
+
+  return {
+    branchId: safeBranchId,
+    intakeId: safeIntakeId,
+    batchId: safeBatchId,
+  };
 }
 
 function toStudentListItem(student) {
@@ -47,9 +121,15 @@ function toAdminListItem(admin) {
 
 export async function getAdminMetrics(req, res, next) {
   try {
-    const [students, admins] = await Promise.all([
+    const [students, admins, materials, recentMaterials] = await Promise.all([
       Student.countDocuments(),
       Admin.countDocuments(),
+      Material.countDocuments({ isActive: true }),
+      Material.find({ isActive: true })
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .select('title course weekNumber branchId batchId uploadedByName createdAt')
+        .lean(),
     ]);
 
     const programmesDoc = await AppData.findOne({ key: 'programmes' }).lean();
@@ -60,6 +140,17 @@ export async function getAdminMetrics(req, res, next) {
     res.json({
       students,
       users: admins,
+      materials,
+      recentMaterials: recentMaterials.map((item) => ({
+        id: String(item._id),
+        title: item.title,
+        course: item.course || '',
+        weekNumber: item.weekNumber || null,
+        branchId: item.branchId,
+        batchId: item.batchId,
+        uploadedByName: item.uploadedByName || 'Admin',
+        uploadedAt: item.createdAt,
+      })),
       faculties: 0,
       programmes,
       totalIncome: 0,
@@ -254,6 +345,9 @@ export async function createStudentByAdmin(req, res, next) {
       guardianName,
       guardianPhoneNumber,
       password,
+      branchId,
+      intakeId,
+      batchId,
     } = req.body || {};
 
     const normalizedEmail = normalizeEmail(email);
@@ -263,6 +357,11 @@ export async function createStudentByAdmin(req, res, next) {
     if (!isValidEmail(normalizedEmail)) return res.status(400).json({ message: 'Valid email is required' });
     if (typeof password !== 'string' || password.trim().length < 8) {
       return res.status(400).json({ message: 'Password must be at least 8 characters' });
+    }
+
+    const enrollment = await resolveStudentEnrollment(branchId, intakeId, batchId);
+    if (enrollment?.error) {
+      return res.status(400).json({ message: enrollment.error });
     }
 
     const existing = await Student.findOne({
@@ -278,17 +377,95 @@ export async function createStudentByAdmin(req, res, next) {
       email: normalizedEmail,
       studentId: safeTrim(studentId),
       nic: safeTrim(nic),
-      course: safeTrim(course),
+      course: canonicalCourse(course),
       whatsappNumber: safeTrim(whatsappNumber),
       phoneNumber: safeTrim(phoneNumber),
       address: safeTrim(address),
       guardianName: safeTrim(guardianName),
       guardianPhoneNumber: safeTrim(guardianPhoneNumber),
+      branchId: enrollment.branchId,
+      intakeId: enrollment.intakeId,
+      batchId: enrollment.batchId,
       passwordHash,
       createdBy: 'admin',
     });
 
     res.status(201).json({ student: toStudentListItem(created) });
+  } catch (err) {
+    if (err?.code === 11000) {
+      return res.status(409).json({ message: 'Email or Student ID already exists' });
+    }
+    next(err);
+  }
+}
+
+export async function updateStudentByAdmin(req, res, next) {
+  try {
+    const id = String(req.params?.id || '').trim();
+    if (!id) return res.status(400).json({ message: 'Student ID is required' });
+
+    const student = await Student.findById(id);
+    if (!student) return res.status(404).json({ message: 'Student not found' });
+
+    const {
+      fullName,
+      email,
+      studentId,
+      nic,
+      course,
+      whatsappNumber,
+      phoneNumber,
+      address,
+      guardianName,
+      guardianPhoneNumber,
+      branchId,
+      intakeId,
+      batchId,
+    } = req.body || {};
+
+    const normalizedEmail = normalizeEmail(email);
+    if (!safeTrim(fullName)) return res.status(400).json({ message: 'Name is required' });
+    if (!safeTrim(studentId)) return res.status(400).json({ message: 'Student ID is required' });
+    if (!isValidEmail(normalizedEmail)) return res.status(400).json({ message: 'Valid email is required' });
+
+    const enrollment = await resolveStudentEnrollment(branchId, intakeId, batchId);
+    if (enrollment?.error) {
+      return res.status(400).json({ message: enrollment.error });
+    }
+
+    const existing = await Student.findOne({
+      _id: { $ne: student._id },
+      $or: [{ email: normalizedEmail }, { studentId: safeTrim(studentId) }],
+    }).lean();
+
+    if (existing) return res.status(409).json({ message: 'Email or Student ID already exists' });
+
+    student.fullName = safeTrim(fullName);
+    student.email = normalizedEmail;
+    student.studentId = safeTrim(studentId);
+    student.nic = safeTrim(nic);
+    student.course = canonicalCourse(course);
+    student.whatsappNumber = safeTrim(whatsappNumber);
+    student.phoneNumber = safeTrim(phoneNumber);
+    student.address = safeTrim(address);
+    student.guardianName = safeTrim(guardianName);
+    student.guardianPhoneNumber = safeTrim(guardianPhoneNumber);
+    student.branchId = enrollment.branchId;
+    student.intakeId = enrollment.intakeId;
+    student.batchId = enrollment.batchId;
+
+    await student.save();
+
+    await logAdminAction(req.adminAuth?.id, 'EDIT_STUDENT', {
+      studentId: student._id,
+      studentEmail: student.email,
+      course: student.course,
+      branchId: student.branchId,
+      intakeId: student.intakeId,
+      batchId: student.batchId,
+    });
+
+    res.json({ student: toStudentListItem(student) });
   } catch (err) {
     if (err?.code === 11000) {
       return res.status(409).json({ message: 'Email or Student ID already exists' });

@@ -7,10 +7,10 @@ import { DEFAULT_LMS_DATA } from '../data/defaultLmsData.js';
 import { getOrCreateAppDataPayload } from '../services/appData.service.js';
 import { logAdminAction } from '../middleware/adminAuth.js';
 import {
-  deleteImageAsset,
-  getImageAssetInfo,
-  openImageDownloadStream,
-  storeImageUpload,
+  deleteFileAsset,
+  getFileAssetInfo,
+  openFileDownloadStream,
+  storeFileUpload,
 } from '../services/imageStore.service.js';
 
 function normalizeId(value) {
@@ -25,12 +25,14 @@ function normalizeName(value) {
 function canonicalCourse(value) {
   const v = String(value || '').trim().toLowerCase();
   if (!v) return '';
-  if (v === 'cabin crew') return 'Cabin Crew';
-  if (v === 'ground operations' || v === 'ground ops') return 'Ground Operations';
-  if (v === 'ticketing & reservations' || v === 'ticketing and reservations' || v === 'ticketing') {
+  if (v === 'cabin crew' || v === 'cabin' || v === 'crew') return 'Cabin Crew';
+  if (v === 'ground operations' || v === 'ground ops' || v === 'ground operation' || v === 'ground') {
+    return 'Ground Operations';
+  }
+  if (v === 'ticketing & reservations' || v === 'ticketing and reservations' || v === 'ticketing' || v === 'reservations') {
     return 'Ticketing & Reservations';
   }
-  if (v === 'air cargo') return 'Air Cargo';
+  if (v === 'air cargo' || v === 'cargo') return 'Air Cargo';
   return String(value || '').trim();
 }
 
@@ -44,6 +46,46 @@ function removeUploadedFile(file) {
   if (file?.path && fs.existsSync(file.path)) {
     fs.unlinkSync(file.path);
   }
+}
+
+function parsePositiveInt(value) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+async function deleteMaterialStoredFile(material) {
+  if (material?.fileAssetId) {
+    await deleteFileAsset(material.fileAssetId);
+  }
+
+  if (material?.fileUrl) {
+    const absPath = path.resolve(material.fileUrl);
+    if (fs.existsSync(absPath)) {
+      fs.unlinkSync(absPath);
+    }
+  }
+}
+
+function toAdminMaterialItem(material) {
+  return {
+    id: material._id,
+    title: material.title,
+    description: material.description || '',
+    fileName: material.fileName,
+    fileType: material.fileType,
+    fileSize: material.fileSize,
+    branchId: material.branchId,
+    intakeId: material.intakeId,
+    batchId: material.batchId,
+    course: material.course || '',
+    weekNumber: material.weekNumber || null,
+    content: material.content || '',
+    category: material.category || '',
+    uploadedBy: material.uploadedByName,
+    uploadedAt: material.createdAt,
+    downloadCount: material.downloadCount,
+    isActive: material.isActive,
+  };
 }
 
 function toOption(node) {
@@ -84,12 +126,13 @@ async function getAuthorizedStudentMaterial(materialId, studentId) {
     return { status: 404, body: { message: 'Material not found' } };
   }
 
-  if (
-    material.branchId !== student.branchId ||
-    material.batchId !== student.batchId ||
-    (material.course && canonicalCourse(material.course) !== canonicalCourse(student.course)) ||
-    (material.intakeId && student.intakeId && material.intakeId !== student.intakeId)
-  ) {
+  const sameBranch = normalizeId(material.branchId) === normalizeId(student.branchId);
+  const sameCourse = !material.course || canonicalCourse(material.course) === canonicalCourse(student.course);
+  const materialHasBatch = Boolean(String(material.batchId || '').trim());
+  const sameBatch = materialHasBatch && normalizeId(material.batchId) === normalizeId(student.batchId);
+  const sameIntake = !materialHasBatch && normalizeId(material.intakeId) === normalizeId(student.intakeId);
+
+  if (!sameBranch || !sameCourse || !(sameBatch || sameIntake)) {
     return {
       status: 403,
       body: { message: 'Access denied. This material is not available for your enrollment.' },
@@ -121,28 +164,19 @@ function validateMaterialTitle(title) {
     return { valid: false, error: 'Please provide a descriptive title. Generic names like "file1" or "document" are not allowed' };
   }
   
-  // Check for proper format (Week N or Module N)
-  const formatRegex = /^(Week|Module)\s+\d+\s*—\s*.+/i;
-  if (!formatRegex.test(trimmed)) {
-    return { 
-      valid: false, 
-      error: 'Title should follow format "Week N — Topic Name" or "Module N — Topic Name". Example: "Week 4 — HTML Forms Notes"' 
-    };
-  }
-  
   return { valid: true };
 }
 
 function validateUploadFields(body) {
-  const { branchId, batchId, title, course, weekNumber } = body;
+  const { branchId, intakeId, title, course, weekNumber } = body;
   const errors = [];
   
   if (!branchId?.trim()) {
     errors.push('Please select a branch');
   }
   
-  if (!batchId?.trim()) {
-    errors.push('Please select a batch');
+  if (!intakeId?.trim()) {
+    errors.push('Please select an intake');
   }
 
   const normalizedCourse = canonicalCourse(course);
@@ -281,17 +315,18 @@ export async function uploadMaterial(req, res, next) {
     const parsedWeekNumber = Number.parseInt(weekNumber, 10);
     const normalizedCourse = canonicalCourse(course);
     const moduleMatch = title.match(/Module\s+(\d+)/i);
-    const isImageUpload = Boolean(req.file) && String(req.file.mimetype || '').startsWith('image/');
-    let imageAssetId = '';
+    let fileAssetId = '';
     
     try {
-      if (isImageUpload) {
-        imageAssetId = await storeImageUpload(req.file, {
+      if (req.file) {
+        fileAssetId = await storeFileUpload(req.file, {
           scope: 'materials',
           title: title.trim(),
           branchId: branchId.trim(),
           intakeId: intakeId?.trim() || '',
           batchId: batchId.trim(),
+          course: normalizedCourse,
+          weekNumber: parsedWeekNumber,
         });
       }
 
@@ -306,10 +341,8 @@ export async function uploadMaterial(req, res, next) {
         description: description?.trim() || '',
         content: String(content || '').trim(),
         fileName: req.file?.originalname || `${title.trim()}.link`,
-        fileUrl: req.file
-          ? (isImageUpload ? 'api/materials/student/download/content/pending' : (req.file.path || req.file.filename))
-          : '',
-        imageAssetId,
+        fileUrl: req.file ? 'api/materials/student/download/content/pending' : '',
+        fileAssetId,
         fileSize: req.file?.size,
         fileType: req.file?.mimetype || 'text/link',
         uploadedBy: adminAuth.id,
@@ -331,7 +364,7 @@ export async function uploadMaterial(req, res, next) {
         course: normalizedCourse,
         weekNumber: parsedWeekNumber,
         fileSize: req.file?.size || 0,
-        storedInMongo: isImageUpload,
+        storedInMongo: Boolean(req.file),
       });
 
       res.status(201).json({
@@ -348,17 +381,133 @@ export async function uploadMaterial(req, res, next) {
         }
       });
     } catch (err) {
-      if (imageAssetId) {
-        await deleteImageAsset(imageAssetId);
+      if (fileAssetId) {
+        await deleteFileAsset(fileAssetId);
       }
       removeUploadedFile(req.file);
       throw err;
     }
 
-    if (isImageUpload) {
+    if (req.file) {
       removeUploadedFile(req.file);
     }
     
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateMaterial(req, res, next) {
+  try {
+    const { materialId } = req.params;
+    const existing = await Material.findById(materialId);
+    if (!existing) {
+      removeUploadedFile(req.file);
+      return res.status(404).json({ message: 'Material not found' });
+    }
+
+    const { branchId, intakeId, batchId, title, description, category, course, weekNumber, content } = req.body || {};
+    const validationErrors = validateUploadFields({
+      branchId,
+      batchId,
+      title,
+      course,
+      weekNumber,
+    });
+
+    if (validationErrors.length > 0) {
+      removeUploadedFile(req.file);
+      return res.status(400).json({ message: 'Update validation failed', errors: validationErrors });
+    }
+
+    const normalizedCourse = canonicalCourse(course);
+    const parsedWeekNumber = parsePositiveInt(weekNumber);
+    const previousFileAssetId = existing.fileAssetId || '';
+
+    let nextFileAssetId = existing.fileAssetId || '';
+    let nextFileName = existing.fileName;
+    let nextFileSize = existing.fileSize;
+    let nextFileType = existing.fileType;
+    let removeOldAsset = false;
+
+    try {
+      if (req.file) {
+        nextFileAssetId = await storeFileUpload(req.file, {
+          scope: 'materials',
+          title: String(title || '').trim(),
+          branchId: String(branchId || '').trim(),
+          intakeId: String(intakeId || '').trim(),
+          batchId: String(batchId || '').trim(),
+          course: normalizedCourse,
+          weekNumber: parsedWeekNumber,
+          replacedMaterialId: String(existing._id),
+        });
+        nextFileName = req.file.originalname;
+        nextFileSize = req.file.size;
+        nextFileType = req.file.mimetype;
+        removeOldAsset = Boolean(existing.fileAssetId);
+      }
+
+      existing.branchId = String(branchId || '').trim();
+      existing.intakeId = String(intakeId || '').trim();
+      existing.batchId = String(batchId || '').trim();
+      existing.course = normalizedCourse;
+      existing.weekNumber = parsedWeekNumber;
+      existing.week = parsedWeekNumber;
+      existing.title = String(title || '').trim();
+      existing.description = String(description || '').trim();
+      existing.content = String(content || '').trim();
+      existing.category = String(category || 'Study Material').trim() || 'Study Material';
+      existing.fileAssetId = nextFileAssetId;
+      existing.fileName = nextFileName || existing.fileName;
+      existing.fileSize = nextFileSize;
+      existing.fileType = nextFileType || existing.fileType;
+      existing.fileUrl = existing.fileAssetId ? 'api/materials/student/download/content/pending' : existing.fileUrl;
+
+      await existing.save();
+
+      if (req.file) {
+        removeUploadedFile(req.file);
+      }
+      if (removeOldAsset) {
+        await deleteFileAsset(previousFileAssetId);
+      }
+
+      await logAdminAction(req.adminAuth?.id, 'EDIT_MATERIALS', {
+        materialId: existing._id,
+        title: existing.title,
+      });
+
+      res.json({ message: 'Material updated successfully', material: toAdminMaterialItem(existing.toObject()) });
+    } catch (err) {
+      if (req.file) {
+        removeUploadedFile(req.file);
+        if (nextFileAssetId && nextFileAssetId !== existing.fileAssetId) {
+          await deleteFileAsset(nextFileAssetId);
+        }
+      }
+      throw err;
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function deleteMaterial(req, res, next) {
+  try {
+    const { materialId } = req.params;
+    const material = await Material.findByIdAndDelete(materialId).lean();
+    if (!material) {
+      return res.status(404).json({ message: 'Material not found' });
+    }
+
+    await deleteMaterialStoredFile(material);
+    await logAdminAction(req.adminAuth?.id, 'DELETE_MATERIALS', {
+      materialId,
+      title: material.title,
+    });
+
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }
@@ -379,13 +528,14 @@ export async function getStudentMaterials(req, res, next) {
 
     const effectiveBranchId = String(req.auth?.branchId || student.branchId || '').trim();
     const effectiveBatchId = String(req.auth?.batchId || student.batchId || '').trim();
+    const effectiveIntakeId = String(student.intakeId || '').trim();
     const effectiveCourse = canonicalCourse(req.auth?.course || student.course || '');
 
-    if (!effectiveBranchId || !effectiveBatchId || !effectiveCourse) {
+    if (!effectiveBranchId || !effectiveCourse || (!effectiveBatchId && !effectiveIntakeId)) {
       return res.json({ 
         materials: [], 
         materialsByWeek: [],
-        message: 'Your enrollment is incomplete (branch, batch, or course). Please contact administration.' 
+        message: 'Your enrollment is incomplete (branch, intake or batch, or course). Please contact administration.' 
       });
     }
 
@@ -400,15 +550,23 @@ export async function getStudentMaterials(req, res, next) {
     
     const branchName = branch?.name || 'Unknown Branch';
     const intakeName = intake?.name || 'Unknown Intake';
-    const batchName = batch?.name || 'Unknown Batch';
+    const batchName = effectiveBatchId ? (batch?.name || 'Unknown Batch') : '';
     
     // Get materials for student's batch
-    const materials = await Material.find({
+    const materialsFilter = {
       branchId: effectiveBranchId,
-      batchId: effectiveBatchId,
       course: effectiveCourse,
       isActive: true
-    })
+    };
+
+    if (effectiveBatchId) {
+      materialsFilter.batchId = effectiveBatchId;
+    } else {
+      materialsFilter.intakeId = effectiveIntakeId;
+      materialsFilter.$or = [{ batchId: '' }, { batchId: { $exists: false } }, { batchId: null }];
+    }
+
+    const materials = await Material.find(materialsFilter)
     .sort({ weekNumber: 1, createdAt: -1 })
     .select('title description fileName fileType fileSize createdAt category week module weekNumber course content downloadCount')
     .lean();
@@ -501,13 +659,13 @@ export async function streamStudentMaterialContent(req, res, next) {
 
     const { material } = resolved;
 
-    if (material.imageAssetId) {
-      const asset = await getImageAssetInfo(material.imageAssetId);
+    if (material.fileAssetId) {
+      const asset = await getFileAssetInfo(material.fileAssetId);
       if (!asset) {
         return res.status(404).json({ message: 'Material file not found' });
       }
 
-      const stream = openImageDownloadStream(material.imageAssetId);
+      const stream = openFileDownloadStream(material.fileAssetId);
       if (!stream) {
         return res.status(404).json({ message: 'Material file not found' });
       }
@@ -552,22 +710,7 @@ export async function getAdminMaterials(req, res, next) {
     const total = await Material.countDocuments(filter);
     
     res.json({
-      materials: materials.map(material => ({
-        id: material._id,
-        title: material.title,
-        fileName: material.fileName,
-        fileType: material.fileType,
-        fileSize: material.fileSize,
-        branchId: material.branchId,
-        intakeId: material.intakeId,
-        batchId: material.batchId,
-        course: material.course || '',
-        weekNumber: material.weekNumber || null,
-        uploadedBy: material.uploadedByName,
-        uploadedAt: material.createdAt,
-        downloadCount: material.downloadCount,
-        isActive: material.isActive
-      })),
+      materials: materials.map(toAdminMaterialItem),
       pagination: {
         page: pageNum,
         limit: limitNum,

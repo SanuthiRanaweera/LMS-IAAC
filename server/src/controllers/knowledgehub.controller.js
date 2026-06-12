@@ -4,9 +4,13 @@ import { Admin } from '../models/Admin.js';
 import { KnowledgeHubItem } from '../models/KnowledgeHubItem.js';
 import { Student } from '../models/Student.js';
 import {
+  deleteFileAsset,
   deleteImageAsset,
+  getFileAssetInfo,
   getImageAssetInfo,
+  openFileDownloadStream,
   openImageDownloadStream,
+  storeFileUpload,
   storeImageUpload,
 } from '../services/imageStore.service.js';
 
@@ -100,6 +104,10 @@ function removeUploadedFiles(files) {
 }
 
 async function removeStoredKnowledgeHubFiles(item) {
+  if (item?.fileAssetId) {
+    await deleteFileAsset(item.fileAssetId);
+  }
+
   if (Array.isArray(item?.imageAssetIds) && item.imageAssetIds.length > 0) {
     await Promise.allSettled(item.imageAssetIds.map((assetId) => deleteImageAsset(assetId)));
   }
@@ -192,6 +200,20 @@ export async function studentDownloadResource(req, res, next) {
     if (!sameBatch && !sameIntake && !sameBranch) {
       return res.status(403).json({ message: 'This resource is not available for your batch.' });
     }
+    if (item.fileAssetId) {
+      const asset = await getFileAssetInfo(item.fileAssetId);
+      if (!asset) return res.status(404).json({ message: 'File not found' });
+
+      const stream = openFileDownloadStream(item.fileAssetId);
+      if (!stream) return res.status(404).json({ message: 'File not found' });
+
+      res.setHeader('Content-Type', asset.contentType || item.fileMime || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `attachment; filename="${item.fileName || asset.filename || 'download'}"`);
+      stream.on('error', next);
+      stream.pipe(res);
+      return;
+    }
+
     if (!item.filePath) return res.status(404).json({ message: 'No file attached' });
 
     const absPath = path.resolve(item.filePath);
@@ -225,7 +247,7 @@ export async function lecturerAddHubItem(req, res, next) {
       return res.status(403).json({ message: 'You can only add resources for your assigned batch' });
     }
 
-    let filePath = '', fileName = '', fileSize = 0, fileMime = '';
+    let filePath = '', fileAssetId = '', fileName = '', fileSize = 0, fileMime = '';
 
     if (resourceType === 'file') {
       if (!req.file) return res.status(400).json({ message: 'File is required for type "file"' });
@@ -238,10 +260,18 @@ export async function lecturerAddHubItem(req, res, next) {
         fs.unlinkSync(req.file.path);
         return res.status(400).json({ message: 'Invalid file extension.' });
       }
-      filePath = req.file.path;
+      fileAssetId = await storeFileUpload(req.file, {
+        scope: 'knowledge-hub',
+        resourceType,
+        title: safeStr(title),
+        branchId: targetBranchId,
+        intakeId: targetIntakeId,
+        batchId: targetBatchId,
+      });
       fileName = req.file.originalname;
       fileSize = req.file.size;
       fileMime = req.file.mimetype;
+      removeUploadedFiles([req.file]);
     } else if (resourceType === 'link' || resourceType === 'video') {
       if (!contentUrl || !isValidUrl(contentUrl)) {
         return res.status(400).json({ message: 'A valid URL is required for type "link" or "video"' });
@@ -259,7 +289,7 @@ export async function lecturerAddHubItem(req, res, next) {
       resourceType,
       title:       safeStr(title),
       description: safeStr(description || '', 1000),
-      filePath, fileName, fileSize, fileMime,
+      filePath, fileAssetId, fileName, fileSize, fileMime,
       contentUrl:  contentUrl ? safeStr(contentUrl, 1000) : '',
       textContent: textContent ? safeStr(textContent, 20000) : '',
       addedBy:     String(lecturer._id),
@@ -310,7 +340,7 @@ export async function adminAddHubItem(req, res, next) {
     if (!normalizeId(branchId)) return res.status(400).json({ message: 'Branch is required' });
     if (!normalizeId(batchId))  return res.status(400).json({ message: 'Batch is required' });
 
-    let filePath = '', fileName = '', fileSize = 0, fileMime = '';
+    let filePath = '', fileAssetId = '', fileName = '', fileSize = 0, fileMime = '';
     let imageAssetIds = [];
     let imagePaths = [];
     let imageNames = [];
@@ -322,10 +352,18 @@ export async function adminAddHubItem(req, res, next) {
         removeUploadedFiles([file]);
         return res.status(400).json({ message: 'Invalid file type' });
       }
-      filePath = file.path;
+      fileAssetId = await storeFileUpload(file, {
+        scope: 'knowledge-hub',
+        resourceType,
+        title: safeStr(title),
+        branchId: normalizeId(branchId),
+        intakeId: normalizeId(intakeId || ''),
+        batchId: normalizeId(batchId),
+      });
       fileName = file.originalname;
       fileSize = file.size;
       fileMime = file.mimetype;
+      removeUploadedFiles([file]);
     } else if (resourceType === 'link' || resourceType === 'video') {
       if (!contentUrl || !isValidUrl(contentUrl)) return res.status(400).json({ message: 'Valid URL required' });
     } else if (resourceType === 'note') {
@@ -379,7 +417,7 @@ export async function adminAddHubItem(req, res, next) {
         resourceType,
         title:       safeStr(title),
         description: safeStr(description || '', 1000),
-        filePath, fileName, fileSize, fileMime,
+        filePath, fileAssetId, fileName, fileSize, fileMime,
         imageAssetIds, imagePaths, imageNames,
         contentUrl:  contentUrl ? safeStr(contentUrl, 1000) : '',
         textContent: textContent ? safeStr(textContent, 20000) : '',
@@ -388,6 +426,9 @@ export async function adminAddHubItem(req, res, next) {
         addedByRole: 'superadmin',
       });
     } catch (err) {
+      if (fileAssetId) {
+        await deleteFileAsset(fileAssetId);
+      }
       await Promise.allSettled(imageAssetIds.map((assetId) => deleteImageAsset(assetId)));
       throw err;
     }

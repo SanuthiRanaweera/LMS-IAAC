@@ -14,7 +14,7 @@ const MaterialSchema = new Schema(
     // Academic hierarchy targeting
     branchId: { type: String, required: true, trim: true, maxlength: 64, index: true },
     intakeId: { type: String, required: true, trim: true, maxlength: 64, index: true },
-    batchId: { type: String, required: true, trim: true, maxlength: 64, index: true },
+    batchId: { type: String, trim: true, maxlength: 64, index: true, default: '' },
     course: { type: String, enum: STUDY_MATERIAL_COURSES, required: true, index: true },
     weekNumber: { type: Number, required: true, min: 1, max: 52, index: true },
     
@@ -26,6 +26,7 @@ const MaterialSchema = new Schema(
     fileName: { type: String, required: true, trim: true, maxlength: 255 },
     fileUrl: { type: String, trim: true, maxlength: 500, default: '' },
     content: { type: String, trim: true, maxlength: 2000, default: '' },
+    fileAssetId: { type: String, trim: true, maxlength: 64, default: '' },
     imageAssetId: { type: String, trim: true, maxlength: 64, default: '' },
     fileSize: { type: Number }, // in bytes
     fileType: { type: String, trim: true, maxlength: 50 }, // PDF, DOCX, PPTX, MP4, etc.

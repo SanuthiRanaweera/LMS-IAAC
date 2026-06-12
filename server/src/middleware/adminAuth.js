@@ -46,9 +46,12 @@ export function requireSuperAdmin(action) {
 export function isStaffAllowedAction(action) {
   const staffAllowedActions = [
     'ADD_MATERIALS',
+    'EDIT_MATERIALS',
+    'DELETE_MATERIALS',
     'ADD_SCHEDULE',
     'VIEW_STUDENTS',
-    'CREATE_STUDENT'
+    'CREATE_STUDENT',
+    'EDIT_STUDENT'
   ];
   return staffAllowedActions.includes(action);
 }

@@ -1,6 +1,21 @@
 import { DEFAULT_LMS_DATA } from '../data/defaultLmsData.js';
+import { Material } from '../models/Material.js';
 import { Student } from '../models/Student.js';
 import { getOrCreateAppDataPayload } from '../services/appData.service.js';
+
+function canonicalCourse(value) {
+  const v = String(value || '').trim().toLowerCase();
+  if (!v) return '';
+  if (v === 'cabin crew' || v === 'cabin' || v === 'crew') return 'Cabin Crew';
+  if (v === 'ground operations' || v === 'ground ops' || v === 'ground operation' || v === 'ground') {
+    return 'Ground Operations';
+  }
+  if (v === 'ticketing & reservations' || v === 'ticketing and reservations' || v === 'ticketing' || v === 'reservations') {
+    return 'Ticketing & Reservations';
+  }
+  if (v === 'air cargo' || v === 'cargo') return 'Air Cargo';
+  return String(value || '').trim();
+}
 
 export async function getStudentMe(req, res, next) {
   try {
@@ -35,7 +50,59 @@ export async function getStudentMe(req, res, next) {
 export async function getDashboard(req, res, next) {
   try {
     const payload = await getOrCreateAppDataPayload('dashboard', DEFAULT_LMS_DATA.dashboard);
-    res.json(payload);
+    const studentId = req.auth?.sub;
+    const student = studentId ? await Student.findById(studentId).lean() : null;
+    const progress = payload?.progress && typeof payload.progress === 'object' ? { ...payload.progress } : {};
+
+    let activeMaterial = payload?.activeMaterial || null;
+    if (student?.branchId && student?.course && (student?.batchId || student?.intakeId)) {
+      const filter = {
+        branchId: student.branchId,
+        course: canonicalCourse(student.course),
+        isActive: true,
+      };
+
+      if (student.batchId) {
+        filter.batchId = student.batchId;
+      } else if (student.intakeId) {
+        filter.intakeId = student.intakeId;
+        filter.$or = [{ batchId: '' }, { batchId: { $exists: false } }, { batchId: null }];
+      }
+
+      const latestMaterial = await Material.findOne(filter)
+        .sort({ weekNumber: -1, createdAt: -1 })
+        .lean();
+
+      if (latestMaterial) {
+        activeMaterial = {
+          name: latestMaterial.title,
+          type: String(latestMaterial.fileType || '').startsWith('video/') ? 'Video' : 'Material',
+          courseTitle: latestMaterial.course || student.course || '',
+          resumeHref: '/materials',
+          progressPct: 0,
+          moduleTitle: latestMaterial.description || '',
+          lastSeen: latestMaterial.weekNumber ? `Week ${latestMaterial.weekNumber}` : '',
+        };
+      }
+    }
+
+    if (!progress.courseTitle && student?.course) {
+      progress.courseTitle = student.course;
+    }
+
+    res.json({
+      ...payload,
+      progress,
+      activeMaterial,
+      student: student
+        ? {
+            id: String(student._id),
+            name: student.fullName,
+            firstName: student.fullName?.split(' ')[0] || student.fullName,
+            course: student.course,
+          }
+        : undefined,
+    });
   } catch (err) {
     next(err);
   }

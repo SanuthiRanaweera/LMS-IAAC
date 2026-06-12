@@ -1,6 +1,44 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { apiDelete, apiGet, apiPost } from '../../api/http.js';
+import { apiDelete, apiGet, apiPost, apiPut } from '../../api/http.js';
+
+function buildIntakeOptions(branches, branchId) {
+  if (!branchId) return [];
+  const branch = branches.find((item) => String(item.id) === String(branchId));
+  return Array.isArray(branch?.intakes) ? branch.intakes : [];
+}
+
+function buildBatchOptions(branches, branchId, intakeId) {
+  if (!branchId || !intakeId) return [];
+  const branch = branches.find((item) => String(item.id) === String(branchId));
+  const intake = Array.isArray(branch?.intakes)
+    ? branch.intakes.find((item) => String(item.id) === String(intakeId))
+    : null;
+  return Array.isArray(intake?.batches) ? intake.batches : [];
+}
+
+const EMPTY_FORM = {
+  fullName: '',
+  email: '',
+  studentId: '',
+  dob: '',
+  gender: '',
+  nic: '',
+  course: '',
+  school: '',
+  olResult: '',
+  olMath: '',
+  olEnglish: '',
+  whatsappNumber: '',
+  phoneNumber: '',
+  address: '',
+  guardianName: '',
+  guardianPhoneNumber: '',
+  password: '',
+  branchId: '',
+  intakeId: '',
+  batchId: '',
+};
 
 export default function AdminStudentsPage() {
   const { admin } = useOutletContext();
@@ -15,28 +53,30 @@ export default function AdminStudentsPage() {
   const [detailStudent, setDetailStudent] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState(null);
+  const [branches, setBranches] = useState([]);
+  const [hierarchyError, setHierarchyError] = useState(null);
 
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState(null);
-  const [form, setForm] = useState({
-    fullName: '',
-    email: '',
-    studentId: '',
-    dob: '',
-    gender: '',
-    nic: '',
-    course: '',
-    school: '',
-    olResult: '',
-    olMath: '',
-    olEnglish: '',
-    whatsappNumber: '',
-    phoneNumber: '',
-    address: '',
-    guardianName: '',
-    guardianPhoneNumber: '',
-    password: '',
-  });
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [editingStudent, setEditingStudent] = useState(null);
+  const [editForm, setEditForm] = useState({ ...EMPTY_FORM, id: '' });
+  const [editError, setEditError] = useState(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const createIntakes = useMemo(() => buildIntakeOptions(branches, form.branchId), [branches, form.branchId]);
+  const createBatches = useMemo(
+    () => buildBatchOptions(branches, form.branchId, form.intakeId),
+    [branches, form.branchId, form.intakeId]
+  );
+  const editIntakes = useMemo(
+    () => buildIntakeOptions(branches, editForm.branchId),
+    [branches, editForm.branchId]
+  );
+  const editBatches = useMemo(
+    () => buildBatchOptions(branches, editForm.branchId, editForm.intakeId),
+    [branches, editForm.branchId, editForm.intakeId]
+  );
 
   const queryString = useMemo(() => {
     const query = q.trim();
@@ -57,7 +97,48 @@ export default function AdminStudentsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryString]);
 
+  useEffect(() => {
+    apiGet('/api/materials/hierarchy/full')
+      .then((json) => setBranches(Array.isArray(json?.branches) ? json.branches : []))
+      .catch((err) => setHierarchyError(err));
+  }, []);
+
+  useEffect(() => {
+    if (!form.branchId) {
+      setForm((current) => ({ ...current, intakeId: '', batchId: '' }));
+      return;
+    }
+
+    if (!createIntakes.some((item) => String(item.id) === String(form.intakeId))) {
+      setForm((current) => ({ ...current, intakeId: '', batchId: '' }));
+      return;
+    }
+
+    if (!createBatches.some((item) => String(item.id) === String(form.batchId))) {
+      setForm((current) => ({ ...current, batchId: '' }));
+    }
+  }, [form.branchId, form.intakeId, form.batchId, createIntakes, createBatches]);
+
+  useEffect(() => {
+    if (!editingStudent) return;
+
+    if (!editForm.branchId) {
+      setEditForm((current) => ({ ...current, intakeId: '', batchId: '' }));
+      return;
+    }
+
+    if (!editIntakes.some((item) => String(item.id) === String(editForm.intakeId))) {
+      setEditForm((current) => ({ ...current, intakeId: '', batchId: '' }));
+      return;
+    }
+
+    if (!editBatches.some((item) => String(item.id) === String(editForm.batchId))) {
+      setEditForm((current) => ({ ...current, batchId: '' }));
+    }
+  }, [editingStudent, editForm.branchId, editForm.intakeId, editForm.batchId, editIntakes, editBatches]);
+
   const update = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+  const updateEdit = (key) => (e) => setEditForm((f) => ({ ...f, [key]: e.target.value }));
 
   const onCreate = (e) => {
     e.preventDefault();
@@ -66,19 +147,55 @@ export default function AdminStudentsPage() {
 
     apiPost('/api/admin/students', form)
       .then(() => {
-        setForm({
-          fullName: '',
-          email: '',
-          studentId: '',
-          course: '',
-          phoneNumber: '',
-          whatsappNumber: '',
-          password: '',
-        });
+        setForm(EMPTY_FORM);
         load();
       })
       .catch((err) => setCreateError(err))
       .finally(() => setCreating(false));
+  };
+
+  const startEdit = (studentId) => {
+    setEditError(null);
+    setSavingEdit(false);
+    apiGet(`/api/admin/students/${encodeURIComponent(studentId)}`)
+      .then((json) => {
+        const student = json?.student;
+        if (!student) return;
+        setEditingStudent(student);
+        setEditForm({
+          id: student.id,
+          fullName: student.fullName || '',
+          email: student.email || '',
+          studentId: student.studentId || '',
+          nic: student.nic || '',
+          course: student.course || '',
+          whatsappNumber: student.whatsappNumber || '',
+          phoneNumber: student.phoneNumber || '',
+          address: student.address || '',
+          guardianName: student.guardianName || '',
+          guardianPhoneNumber: student.guardianPhoneNumber || '',
+          branchId: student.branchId || '',
+          intakeId: student.intakeId || '',
+          batchId: student.batchId || '',
+        });
+      })
+      .catch((err) => setEditError(err));
+  };
+
+  const onSaveEdit = (e) => {
+    e.preventDefault();
+    if (!editForm.id) return;
+
+    setSavingEdit(true);
+    setEditError(null);
+
+    apiPut(`/api/admin/students/${encodeURIComponent(editForm.id)}`, editForm)
+      .then(() => {
+        setEditingStudent(null);
+        load();
+      })
+      .catch((err) => setEditError(err))
+      .finally(() => setSavingEdit(false));
   };
 
   const onDelete = (student) => {
@@ -106,6 +223,12 @@ export default function AdminStudentsPage() {
         {createError ? (
           <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
             {createError.message || 'Failed to create student.'}
+          </div>
+        ) : null}
+
+        {hierarchyError ? (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+            {hierarchyError.message || 'Failed to load branch hierarchy.'}
           </div>
         ) : null}
 
@@ -189,14 +312,40 @@ export default function AdminStudentsPage() {
 
           <div>
             <h4 className="mb-2 text-xs font-semibold text-slate-600">Academic</h4>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <label className="text-xs font-semibold text-slate-600">Course</label>
                 <input value={form.course} onChange={update('course')} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-600">Student ID</label>
-                <input value={form.studentId} onChange={update('studentId')} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" required />
+                <label className="text-xs font-semibold text-slate-600">Branch</label>
+                <select value={form.branchId} onChange={update('branchId')} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100">
+                  <option value="">Select branch</option>
+                  {branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>{branch.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600">Intake</label>
+                <select value={form.intakeId} onChange={update('intakeId')} disabled={!form.branchId} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 disabled:bg-slate-50">
+                  <option value="">Select intake</option>
+                  {createIntakes.map((intake) => (
+                    <option key={intake.id} value={intake.id}>{intake.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600">Batch</label>
+                <select value={form.batchId} onChange={update('batchId')} disabled={!form.intakeId || createBatches.length === 0} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 disabled:bg-slate-50">
+                  <option value="">Select batch</option>
+                  {createBatches.map((batch) => (
+                    <option key={batch.id} value={batch.id}>{batch.name}</option>
+                  ))}
+                </select>
+                {form.intakeId && createBatches.length === 0 ? (
+                  <p className="mt-1 text-xs text-slate-500">This intake has no batches. Enrollment will be saved at intake level.</p>
+                ) : null}
               </div>
             </div>
           </div>
@@ -287,6 +436,13 @@ export default function AdminStudentsPage() {
                       >
                         View
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => startEdit(s.id)}
+                        className="rounded-lg border border-sky-200 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-50"
+                      >
+                        Edit
+                      </button>
                       {canDelete ? (
                         <button
                           type="button"
@@ -337,6 +493,106 @@ export default function AdminStudentsPage() {
               </div>
             ) : null}
           </div>
+        </div>
+      ) : null}
+
+      {editingStudent ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-6">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setEditingStudent(null)} />
+          <form onSubmit={onSaveEdit} className="relative w-full max-w-3xl rounded-lg bg-white p-6 shadow-lg">
+            <div className="flex items-start justify-between">
+              <h3 className="text-lg font-bold">Edit student enrollment</h3>
+              <button type="button" className="text-sm text-slate-500" onClick={() => setEditingStudent(null)}>Close</button>
+            </div>
+
+            {editError ? (
+              <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+                {editError.message || 'Failed to update student.'}
+              </div>
+            ) : null}
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="text-xs font-semibold text-slate-600">Full name</label>
+                <input value={editForm.fullName} onChange={updateEdit('fullName')} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" required />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600">Email</label>
+                <input value={editForm.email} onChange={updateEdit('email')} type="email" className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" required />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600">Student ID</label>
+                <input value={editForm.studentId} onChange={updateEdit('studentId')} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" required />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600">Course</label>
+                <input value={editForm.course} onChange={updateEdit('course')} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600">Branch</label>
+                <select value={editForm.branchId} onChange={updateEdit('branchId')} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100">
+                  <option value="">Select branch</option>
+                  {branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>{branch.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600">Intake</label>
+                <select value={editForm.intakeId} onChange={updateEdit('intakeId')} disabled={!editForm.branchId} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 disabled:bg-slate-50">
+                  <option value="">Select intake</option>
+                  {editIntakes.map((intake) => (
+                    <option key={intake.id} value={intake.id}>{intake.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600">Batch</label>
+                <select value={editForm.batchId} onChange={updateEdit('batchId')} disabled={!editForm.intakeId || editBatches.length === 0} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 disabled:bg-slate-50">
+                  <option value="">Select batch</option>
+                  {editBatches.map((batch) => (
+                    <option key={batch.id} value={batch.id}>{batch.name}</option>
+                  ))}
+                </select>
+                {editForm.intakeId && editBatches.length === 0 ? (
+                  <p className="mt-1 text-xs text-slate-500">This intake has no batches. Enrollment will be saved at intake level.</p>
+                ) : null}
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600">Phone</label>
+                <input value={editForm.phoneNumber} onChange={updateEdit('phoneNumber')} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600">WhatsApp</label>
+                <input value={editForm.whatsappNumber} onChange={updateEdit('whatsappNumber')} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600">NIC</label>
+                <input value={editForm.nic} onChange={updateEdit('nic')} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-xs font-semibold text-slate-600">Address</label>
+                <input value={editForm.address} onChange={updateEdit('address')} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600">Guardian name</label>
+                <input value={editForm.guardianName} onChange={updateEdit('guardianName')} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600">Guardian phone</label>
+                <input value={editForm.guardianPhoneNumber} onChange={updateEdit('guardianPhoneNumber')} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" />
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setEditingStudent(null)} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Cancel
+              </button>
+              <button type="submit" disabled={savingEdit} className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800 disabled:opacity-60">
+                {savingEdit ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
+          </form>
         </div>
       ) : null}
     </div>

@@ -3,6 +3,12 @@ import path from 'path';
 import { Admin } from '../models/Admin.js';
 import { Recording } from '../models/Recording.js';
 import { Student } from '../models/Student.js';
+import {
+  deleteFileAsset,
+  getFileAssetInfo,
+  openFileDownloadStream,
+  storeFileUpload,
+} from '../services/imageStore.service.js';
 
 const ALLOWED_VIDEO_MIMES = new Set([
   'video/mp4', 'video/quicktime', 'video/webm',
@@ -74,7 +80,7 @@ function toItem(r) {
     batchId:  r.batchId,
     title:    r.title,
     description: r.description || '',
-    hasFile:   Boolean(r.filePath),
+    hasFile:   Boolean(r.fileAssetId || r.filePath),
     fileName:  r.fileName || '',
     fileSize:  r.fileSize || 0,
     videoLink: r.videoLink || '',
@@ -91,6 +97,53 @@ function buildVisibilityFilter(user) {
   if (user?.intakeId) filter.intakeId = normalizeId(user.intakeId);
   if (user?.branchId) filter.branchId = normalizeId(user.branchId);
   return filter;
+}
+
+function removeTempUpload(file) {
+  if (file?.path && fs.existsSync(file.path)) {
+    fs.unlinkSync(file.path);
+  }
+}
+
+async function streamRecordingAsset(res, next, recording) {
+  const asset = await getFileAssetInfo(recording.fileAssetId);
+  if (!asset) return res.status(404).json({ message: 'File not found' });
+
+  const fileSize = Number(asset.length || recording.fileSize || 0);
+  const range = res.req.headers.range;
+  const mime = asset.contentType || recording.fileMime || 'video/mp4';
+
+  if (range && fileSize > 0) {
+    const [rawStart, rawEnd] = range.replace(/bytes=/, '').split('-');
+    const start = Number.parseInt(rawStart, 10);
+    const requestedEnd = rawEnd ? Number.parseInt(rawEnd, 10) : fileSize - 1;
+    const end = Number.isFinite(requestedEnd) ? Math.min(requestedEnd, fileSize - 1) : fileSize - 1;
+    const chunkSize = end - start + 1;
+
+    if (!Number.isFinite(start) || start < 0 || start >= fileSize || end < start) {
+      return res.status(416).end();
+    }
+
+    res.writeHead(206, {
+      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': chunkSize,
+      'Content-Type': mime,
+    });
+    const stream = openFileDownloadStream(recording.fileAssetId, { start, end: end + 1 });
+    stream.on('error', next);
+    stream.pipe(res);
+    return;
+  }
+
+  res.writeHead(200, {
+    'Content-Length': fileSize,
+    'Content-Type': mime,
+    'Accept-Ranges': 'bytes',
+  });
+  const stream = openFileDownloadStream(recording.fileAssetId);
+  stream.on('error', next);
+  stream.pipe(res);
 }
 
 // ─── STUDENT: list recordings for their batch ────────────────────────────────
@@ -134,6 +187,11 @@ export async function studentStreamRecording(req, res, next) {
     if (recording.videoLink) {
       // Return the embed URL — client renders it in an iframe
       return res.json({ embedUrl: buildEmbedUrl(recording.videoLink) });
+    }
+
+    if (recording.fileAssetId) {
+      await streamRecordingAsset(res, next, recording);
+      return;
     }
 
     if (!recording.filePath) return res.status(404).json({ message: 'No video file' });
@@ -208,7 +266,7 @@ export async function lecturerUploadRecording(req, res, next) {
       return res.status(403).json({ message: 'You can only upload recordings for your assigned batch' });
     }
 
-    let filePath = '', fileName = '', fileSize = 0, fileMime = '';
+    let filePath = '', fileAssetId = '', fileName = '', fileSize = 0, fileMime = '';
     if (req.file) {
       // Validate MIME
       if (!ALLOWED_VIDEO_MIMES.has(req.file.mimetype)) {
@@ -220,10 +278,17 @@ export async function lecturerUploadRecording(req, res, next) {
         fs.unlinkSync(req.file.path);
         return res.status(400).json({ message: 'Invalid file extension.' });
       }
-      filePath = req.file.path;
+      fileAssetId = await storeFileUpload(req.file, {
+        scope: 'recordings',
+        title: safeStr(title),
+        branchId: targetBranchId,
+        intakeId: targetIntakeId,
+        batchId: targetBatchId,
+      });
       fileName = req.file.originalname;
       fileSize = req.file.size;
       fileMime = req.file.mimetype;
+      removeTempUpload(req.file);
     } else if (videoLink) {
       if (!isValidVideoUrl(videoLink)) {
         return res.status(400).json({ message: 'Invalid video URL' });
@@ -238,7 +303,7 @@ export async function lecturerUploadRecording(req, res, next) {
       batchId:  targetBatchId,
       title:  safeStr(title),
       description: safeStr(description || '', 1000),
-      filePath, fileName, fileSize, fileMime,
+      filePath, fileAssetId, fileName, fileSize, fileMime,
       videoLink: videoLink ? safeStr(videoLink, 1000) : '',
       uploadedBy:     String(lecturer._id),
       uploadedByName: lecturer.name,
@@ -261,6 +326,9 @@ export async function lecturerDeleteRecording(req, res, next) {
       return res.status(403).json({ message: 'You can only delete your own recordings' });
     }
 
+    if (recording.fileAssetId) {
+      await deleteFileAsset(recording.fileAssetId);
+    }
     if (recording.filePath && fs.existsSync(recording.filePath)) {
       fs.unlinkSync(recording.filePath);
     }
@@ -292,6 +360,11 @@ export async function adminStreamRecording(req, res, next) {
     if (!recording) return res.status(404).json({ message: 'Recording not found' });
 
     if (recording.videoLink) return res.json({ embedUrl: buildEmbedUrl(recording.videoLink) });
+    if (recording.fileAssetId) {
+      await streamRecordingAsset(res, next, recording);
+      return;
+    }
+
     if (!recording.filePath) return res.status(404).json({ message: 'No file' });
 
     const absPath = path.resolve(recording.filePath);
@@ -333,6 +406,9 @@ export async function adminDeleteRecording(req, res, next) {
     const recording = await Recording.findByIdAndDelete(req.params.id).lean();
     if (!recording) return res.status(404).json({ message: 'Recording not found' });
 
+    if (recording.fileAssetId) {
+      await deleteFileAsset(recording.fileAssetId);
+    }
     if (recording.filePath && fs.existsSync(recording.filePath)) {
       fs.unlinkSync(recording.filePath);
     }
@@ -353,16 +429,23 @@ export async function adminUploadRecording(req, res, next) {
     if (!normalizeId(branchId)) return res.status(400).json({ message: 'Branch is required' });
     if (!normalizeId(batchId))  return res.status(400).json({ message: 'Batch is required' });
 
-    let filePath = '', fileName = '', fileSize = 0, fileMime = '';
+    let filePath = '', fileAssetId = '', fileName = '', fileSize = 0, fileMime = '';
     if (req.file) {
       if (!ALLOWED_VIDEO_MIMES.has(req.file.mimetype)) {
         fs.unlinkSync(req.file.path);
         return res.status(400).json({ message: 'Invalid file type. Only MP4, MOV, WebM allowed.' });
       }
-      filePath = req.file.path;
+      fileAssetId = await storeFileUpload(req.file, {
+        scope: 'recordings',
+        title: safeStr(title),
+        branchId: normalizeId(branchId),
+        intakeId: normalizeId(intakeId || ''),
+        batchId: normalizeId(batchId),
+      });
       fileName = req.file.originalname;
       fileSize = req.file.size;
       fileMime = req.file.mimetype;
+      removeTempUpload(req.file);
     } else if (videoLink) {
       if (!isValidVideoUrl(videoLink)) return res.status(400).json({ message: 'Invalid video URL' });
     } else {
@@ -379,7 +462,7 @@ export async function adminUploadRecording(req, res, next) {
       batchId:  normalizeId(batchId),
       title:  safeStr(title),
       description: safeStr(description || '', 1000),
-      filePath, fileName, fileSize, fileMime,
+      filePath, fileAssetId, fileName, fileSize, fileMime,
       videoLink: videoLink ? safeStr(videoLink, 1000) : '',
       uploadedBy:     adminId,
       uploadedByName: adminName,

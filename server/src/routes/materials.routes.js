@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
-import { requirePermission } from '../middleware/adminAuth.js';
+import { requireAdmin, requirePermission } from '../middleware/adminAuth.js';
 import { requireAuth, requireStudent } from '../middleware/auth.js';
 import {
   getAcademicHierarchy,
@@ -9,6 +9,8 @@ import {
   getIntakes,
   getBatches,
   uploadMaterial,
+  updateMaterial,
+  deleteMaterial,
   getStudentMaterials,
   downloadMaterial,
   streamStudentMaterialContent,
@@ -71,6 +73,7 @@ materialsRouter.get('/branches/:branchId/intakes/:intakeId/batches', getBatches)
 // Admin endpoints (require appropriate permissions)
 materialsRouter.post(
   '/upload', 
+  requireAdmin,
   requirePermission('ADD_MATERIALS'),
   upload.single('file'),
   uploadMaterial
@@ -78,9 +81,12 @@ materialsRouter.post(
 
 materialsRouter.get(
   '/admin',
+  requireAdmin,
   requirePermission('VIEW_STUDENTS'), // Admins who can view students can also view materials
   getAdminMaterials
 );
+materialsRouter.put('/admin/:materialId', requireAdmin, requirePermission('EDIT_MATERIALS'), upload.single('file'), updateMaterial);
+materialsRouter.delete('/admin/:materialId', requireAdmin, requirePermission('DELETE_MATERIALS'), deleteMaterial);
 
 // Student endpoints (require student auth)
 materialsRouter.get('/student', requireAuth, requireStudent, getStudentMaterials);
