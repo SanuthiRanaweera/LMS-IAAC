@@ -77,7 +77,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.2.0
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
@@ -85,7 +85,7 @@ jobs:
           port: 22
           script: |
             set -e
-            cd /root/LMS-IAAC
+            cd /opt/lms-app/LMS-IAAC
             git pull origin main
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
             docker image prune -f
