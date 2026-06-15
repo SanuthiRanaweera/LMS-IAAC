@@ -24,11 +24,11 @@ jobs:
           node-version: "20"
 
       - name: Install backend dependencies
-        working-directory: backend
+        working-directory: server
         run: npm install            # ✅ Changed from npm ci to npm install
 
       - name: Run backend tests
-        working-directory: backend
+        working-directory: server
         run: npm test --if-present
         env:
           NODE_ENV: test
@@ -56,11 +56,11 @@ jobs:
         run: npm install            # ✅ Changed from npm ci to npm install
 
       - name: Run frontend tests
-        working-directory: frontend
+        working-directory: client
         run: npm test --if-present --watchAll=false
 
       - name: Build frontend
-        working-directory: frontend
+        working-directory: client
         run: npm run build
 
   # ============================================
