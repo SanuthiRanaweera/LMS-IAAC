@@ -39,17 +39,25 @@ export default function AdminLayout() {
   };
 
   if (!checked) {
-    return <div className="min-h-screen bg-slate-50 p-6 text-sm text-slate-700">Loading…</div>;
+    return (
+      <div className="min-h-screen bg-slate-50 p-6 text-sm text-slate-700">
+        Loading…
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <div className="flex min-h-screen">
-        <AdminSidebar admin={admin} />
+    <div className="min-h-screen overflow-x-hidden bg-slate-50 text-slate-900">
+      <div className="min-h-screen md:flex">
+        <AdminSidebar admin={admin} onLogout={onLogout} />
+
         <div className="min-w-0 flex-1">
           <AdminTopbar admin={admin} onLogout={onLogout} />
-          <main className="p-5 md:p-6">
-            <Outlet context={{ admin }} />
+
+          <main className="w-full max-w-full px-4 py-5 sm:px-5 md:px-6">
+            <div className="mx-auto w-full max-w-7xl">
+              <Outlet context={{ admin }} />
+            </div>
           </main>
         </div>
       </div>
