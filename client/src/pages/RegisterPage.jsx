@@ -11,7 +11,7 @@ const INITIAL_FORM = {
   dob: '',
   gender: '',
   nic: '',
-  course: '',
+  course: '', // This will now store the selected Diploma
   school: '',
   olResult: '',
   olMath: '',
@@ -75,6 +75,7 @@ export default function RegisterPage() {
     if (!form.fullName.trim()) return setError('Full name is required.');
     if (!form.email.trim()) return setError('Email address is required.');
     if (!form.studentId.trim()) return setError('Student ID is required.');
+    if (!form.course.trim()) return setError('Please select a diploma program.');
     if (!form.dob.trim()) return setError('Date of birth is required.');
     if (!form.gender.trim()) return setError('Gender is required.');
     if (!form.password.trim() || form.password.trim().length < 8) {
@@ -139,9 +140,8 @@ export default function RegisterPage() {
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-sky-200">
       <div className="grid min-h-screen lg:grid-cols-[0.9fr_1.1fr]">
         
-        {/* LEFT SIDEBAR - Enhanced Glassmorphism & Branding */}
+        {/* LEFT SIDEBAR */}
         <aside className="relative hidden overflow-hidden bg-[#001f4d] p-12 text-white lg:flex lg:flex-col lg:justify-between shadow-2xl z-10">
-          {/* Cyberpunk/Modern Glow Accents */}
           <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-sky-400/20 via-[#001f4d]/0 to-transparent pointer-events-none" />
           <div className="absolute bottom-0 right-0 w-full h-full bg-[radial-gradient(circle_at_bottom_left,_var(--tw-gradient-stops))] from-blue-600/20 via-transparent to-transparent pointer-events-none" />
           
@@ -176,11 +176,10 @@ export default function RegisterPage() {
           </div>
         </aside>
 
-        {/* RIGHT MAIN CONTENT - Form Area */}
+        {/* RIGHT MAIN CONTENT */}
         <main className="flex items-center justify-center px-4 py-10 sm:px-8 lg:px-12 bg-slate-50 overflow-y-auto">
           <div className="w-full max-w-3xl">
             
-            {/* Mobile Header */}
             <div className="mb-8 flex items-center justify-between lg:hidden">
               <div className="flex items-center gap-3 text-[#002147]">
                 <PlaneTakeoff className="h-7 w-7" />
@@ -284,9 +283,18 @@ export default function RegisterPage() {
                           <Field label="Student ID">
                             <input value={form.studentId} onChange={update('studentId')} className={inputClass} placeholder="IAAC-0001" autoComplete="off" required />
                           </Field>
-                          <Field label="Course Name">
-                            <input value={form.course} onChange={update('course')} className={inputClass} placeholder="Optional" />
+                          
+                          {/* UPDATED: Diploma Dropdown */}
+                          <Field label="Diploma">
+                            <select value={form.course} onChange={update('course')} className={inputClass} required>
+                              <option value="">Select Diploma...</option>
+                              <option value="Cabin Crew">Cabin Crew</option>
+                              <option value="Ground Operations">Ground Operations</option>
+                              <option value="Ticketing & Reservations">Ticketing & Reservations</option>
+                              <option value="Air Cargo">Air Cargo</option>
+                            </select>
                           </Field>
+
                         </div>
                       </div>
                       <div>
@@ -399,7 +407,6 @@ export default function RegisterPage() {
   );
 }
 
-// Improved Field Helper Component
 function Field({ label, children }) {
   return (
     <label className="block w-full">
@@ -409,7 +416,6 @@ function Field({ label, children }) {
   );
 }
 
-// Improved Feature Component for Sidebar
 function Feature({ icon, label, text }) {
   return (
     <div className="flex items-start gap-4 rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-md transition-colors hover:bg-white/10">
@@ -424,5 +430,4 @@ function Feature({ icon, label, text }) {
   );
 }
 
-// Global Input Styling (Upgraded)
-const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 hover:border-slate-300 shadow-sm';
+const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 hover:border-slate-300 shadow-sm bg-white cursor-pointer';
