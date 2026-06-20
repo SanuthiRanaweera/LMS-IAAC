@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Download, FileText, Video, Image, Archive, AlertCircle } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import { Download, FileText, Video, Image, Archive, AlertCircle, Calendar } from 'lucide-react';
 import { apiGet } from '../api/http.js';
 import CardShell from '../components/CardShell.jsx';
 
@@ -23,16 +23,16 @@ function formatDate(dateString) {
 }
 
 function getFileIcon(fileType) {
-  if (!fileType) return <FileText size={20} className="text-slate-500" />;
+  if (!fileType) return <FileText size={24} className="text-slate-400" />;
   
   if (fileType.includes('video')) {
-    return <Video size={20} className="text-purple-600" />;
+    return <Video size={24} className="text-purple-500" />;
   } else if (fileType.includes('image')) {
-    return <Image size={20} className="text-green-600" />;
+    return <Image size={24} className="text-emerald-500" />;
   } else if (fileType.includes('zip') || fileType.includes('rar')) {
-    return <Archive size={20} className="text-orange-600" />;
+    return <Archive size={24} className="text-amber-500" />;
   } else {
-    return <FileText size={20} className="text-blue-600" />;
+    return <FileText size={24} className="text-sky-500" />;
   }
 }
 
@@ -44,6 +44,7 @@ export default function MaterialsPage() {
   useEffect(() => {
     let cancelled = false;
 
+    // Make sure this points to the targeted endpoint we created
     apiGet('/api/student/materials')
       .then((json) => {
         if (!cancelled) setData(json);
@@ -57,13 +58,32 @@ export default function MaterialsPage() {
     };
   }, []);
 
+  // Group the flat materials array by week dynamically
+  const materialsByWeek = useMemo(() => {
+    if (!data || !Array.isArray(data.materials)) return [];
+    
+    const groups = {};
+    data.materials.forEach(material => {
+      const week = material.weekNumber || 'Other';
+      if (!groups[week]) groups[week] = [];
+      groups[week].push(material);
+    });
+
+    // Convert to sorted array
+    return Object.entries(groups)
+      .map(([week, items]) => ({
+        weekNumber: week === 'Other' ? null : Number(week),
+        items
+      }))
+      .sort((a, b) => (a.weekNumber || 999) - (b.weekNumber || 999));
+  }, [data]);
+
   const handleDownload = async (materialId, fileName) => {
     setDownloading(prev => ({ ...prev, [materialId]: true }));
     
     try {
       const response = await apiGet(`/api/materials/student/download/${materialId}`);
       
-      // Create download link
       if (response.downloadUrl) {
         const link = document.createElement('a');
         link.href = response.downloadUrl;
@@ -82,144 +102,108 @@ export default function MaterialsPage() {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-700 shadow-sm">
-        <div className="flex items-center gap-2 mb-2">
-          <AlertCircle size={16} />
-          <span className="font-semibold">Failed to load study materials</span>
+      <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 shadow-sm">
+        <div className="flex items-center gap-3 mb-2">
+          <AlertCircle size={20} className="text-rose-600" />
+          <span className="text-base font-bold text-rose-900">Failed to load study materials</span>
         </div>
-        <div>{error.message || 'Unknown error occurred'}</div>
+        <div className="ml-8">{error.message || 'Please check your internet connection and try again.'}</div>
       </div>
     );
   }
 
   if (!data) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-sm">
-        <div className="flex items-center gap-2">
-          <div className="animate-spin h-4 w-4 border-2 border-sky-600 border-t-transparent rounded-full"></div>
-          Loading materials...
-        </div>
+      <div className="flex flex-col items-center justify-center p-12 text-slate-500">
+        <div className="animate-spin h-8 w-8 border-4 border-slate-200 border-t-sky-600 rounded-full mb-4"></div>
+        <p className="font-medium text-sm">Synchronizing your course materials...</p>
       </div>
     );
   }
 
   const materials = Array.isArray(data?.materials) ? data.materials : [];
-  const materialsByWeek = Array.isArray(data?.materialsByWeek)
-    ? data.materialsByWeek
-    : [];
 
   return (
     <CardShell title="Study Materials">
       {data.message && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
-          <div className="flex items-center gap-2 mb-1">
-            <AlertCircle size={16} />
-            <span className="font-medium">Academic Assignment Status</span>
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 flex gap-3 items-start shadow-sm">
+          <AlertCircle size={18} className="text-amber-600 mt-0.5 shrink-0" />
+          <div>
+            <span className="font-bold block mb-1">Academic Notice</span>
+            {data.message}
           </div>
-          {data.message}
         </div>
       )}
       
       {materials.length === 0 ? (
-        <div className="text-center py-8">
-          <FileText size={48} className="text-slate-300 mx-auto mb-3" />
-          <div className="text-sm text-slate-600 mb-2">No study materials available yet</div>
-          <div className="text-xs text-slate-500">
-            Your instructors will upload course materials organized by branch, batch, course, and week here
+        <div className="text-center py-16 px-4 bg-slate-50/50 rounded-2xl border border-slate-100 border-dashed">
+          <div className="h-20 w-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm border border-slate-100">
+             <FileText size={32} className="text-slate-300" />
           </div>
+          <h3 className="text-lg font-bold text-slate-900 mb-2">No materials available yet</h3>
+          <p className="text-sm text-slate-500 max-w-sm mx-auto leading-relaxed">
+            Your instructors will upload course materials here. When they do, they will be automatically organized by week.
+          </p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {(materialsByWeek.length > 0 ? materialsByWeek : [{ weekNumber: null, items: materials }]).map((group) => (
-            <div key={group.weekNumber ?? 'all'}>
-              {group.weekNumber ? (
-                <div className="mb-3">
-                  <h3 className="text-sm font-semibold text-slate-700 border-b border-slate-200 pb-1">
+        <div className="space-y-8">
+          {materialsByWeek.map((group) => (
+            <div key={group.weekNumber ?? 'all'} className="relative">
+              
+              {group.weekNumber && (
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-sky-100 text-sky-700">
+                     <Calendar size={16} />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-900">
                     Week {group.weekNumber}
                   </h3>
+                  <div className="h-px flex-1 bg-slate-100 ml-2"></div>
                 </div>
-              ) : null}
-              <div className="space-y-3">
-                {group.items.map((material) => (
+              )}
+
+              <div className="grid gap-4">
+                {group.items.map((material) => {
+                  // Mongoose uses _id, so we fallback to id just in case
+                  const materialId = material._id || material.id; 
+
+                  return (
                     <div
-                      key={material.id}
-                      className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 p-4 hover:bg-slate-50 transition-colors"
+                      key={materialId}
+                      className="group flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 rounded-2xl border border-slate-200 bg-white p-5 hover:border-sky-300 hover:shadow-md transition-all"
                     >
-                      <div className="flex items-start gap-3 min-w-0 flex-1">
-                        {getFileIcon(material.fileType)}
+                      <div className="flex items-start gap-4 min-w-0 flex-1">
+                        <div className="mt-1 p-2 bg-slate-50 rounded-xl border border-slate-100 group-hover:bg-sky-50 group-hover:border-sky-100 transition-colors">
+                            {getFileIcon(material.fileType)}
+                        </div>
                         
                         <div className="min-w-0 flex-1">
-                          <div className="font-medium text-slate-900 mb-1">{material.title}</div>
+                          <h4 className="font-bold text-slate-900 mb-1 text-base group-hover:text-sky-700 transition-colors line-clamp-1">{material.title}</h4>
                           
                           {material.description && (
-                            <div className="text-sm text-slate-600 mb-2">{material.description}</div>
+                            <p className="text-sm text-slate-500 mb-3 line-clamp-2 leading-relaxed">{material.description}</p>
                           )}
                           
-                          <div className="flex items-center gap-4 text-xs text-slate-500 mb-2">
-                            <span>{material.fileName}</span>
-                            <span>{formatFileSize(material.fileSize)}</span>
-                            <span>Uploaded {formatDate(material.uploadedAt)}</span>
-                            {material.downloadCount > 0 && (
-                              <span>{material.downloadCount} downloads</span>
-                            )}
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-medium text-slate-500">
+                            <span className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-md text-slate-600">
+                              {material.fileName}
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                              {formatFileSize(material.fileSize)}
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                              Uploaded {formatDate(material.createdAt || material.uploadedAt)}
+                            </span>
                           </div>
-                          
-                          {/* Branch/Academic Hierarchy Info */}
-                          {(material.branchName || material.intakeName || material.batchName) && (
-                            <div className="flex items-center gap-2 text-xs text-slate-600 mb-2">
-                              <span className="font-medium">Academic Path:</span>
-                              {material.branchName && (
-                                <span className="px-2 py-1 bg-sky-100 text-sky-700 rounded font-medium">
-                                  {material.branchName}
-                                </span>
-                              )}
-                              {material.intakeName && (
-                                <>
-                                  <span>→</span>
-                                  <span className="px-2 py-1 bg-green-100 text-green-700 rounded font-medium">
-                                    {material.intakeName}
-                                  </span>
-                                </>
-                              )}
-                              {material.batchName && (
-                                <>
-                                  <span>→</span>
-                                  <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded font-medium">
-                                    {material.batchName}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          )}
-                          
-                          {(material.weekNumber || material.week || material.module) && (
-                            <div className="mt-2">
-                              {material.weekNumber && (
-                                <span className="inline-block px-2 py-1 bg-indigo-100 text-indigo-700 text-xs font-semibold rounded mr-2">
-                                  Week {material.weekNumber}
-                                </span>
-                              )}
-                              {material.week && (
-                                <span className="inline-block px-2 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded">
-                                  Week {material.week}
-                                </span>
-                              )}
-                              {material.module && (
-                                <span className="inline-block px-2 py-1 bg-purple-100 text-purple-700 text-xs font-semibold rounded ml-2">
-                                  Module {material.module}
-                                </span>
-                              )}
-                            </div>
-                          )}
                         </div>
                       </div>
                       
                       <button
-                        onClick={() => handleDownload(material.id, material.fileName)}
-                        disabled={downloading[material.id]}
-                        className="flex items-center gap-2 px-4 py-2 bg-sky-600 text-white rounded-lg font-semibold hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                        onClick={() => handleDownload(materialId, material.fileName)}
+                        disabled={downloading[materialId]}
+                        className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-slate-900 text-white rounded-xl font-bold hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm shadow-sm"
                       >
-                        {downloading[material.id] ? (
+                        {downloading[materialId] ? (
                           <>
                             <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
                             Downloading...
@@ -227,12 +211,13 @@ export default function MaterialsPage() {
                         ) : (
                           <>
                             <Download size={16} />
-                            Download
+                            Download File
                           </>
                         )}
                       </button>
                     </div>
-                  ))}
+                  );
+                })}
               </div>
             </div>
           ))}

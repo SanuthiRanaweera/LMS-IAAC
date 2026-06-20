@@ -21,7 +21,6 @@ function safeTrim(v) {
 }
 
 function isValidEmail(email) {
-  // Simple, pragmatic validation.
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
@@ -59,7 +58,6 @@ async function maybeSendPasswordResetEmail({ toEmail, resetUrl }) {
   const pass = process.env.SMTP_PASS;
   const from = process.env.SMTP_FROM;
 
-  // If SMTP is not configured, just log the URL.
   if (!host || !from || !toEmail || !resetUrl) {
     if (resetUrl) console.log(`[password-reset] ${toEmail || '(unknown)'} -> ${resetUrl}`);
     return;
@@ -197,13 +195,20 @@ async function isEmailAlreadyRegistered(email) {
   return Boolean(student || lecturer);
 }
 
+// UPDATE: Extracted the new missing fields from the frontend request body
 function getStudentRegistrationFields(body = {}) {
   return {
     fullName: body.fullName,
     email: body.email,
     studentId: body.studentId,
+    dob: body.dob,            // Added dob
+    gender: body.gender,      // Added gender
     nic: body.nic,
     course: body.course,
+    school: body.school,      // Added school
+    olResult: body.olResult,  // Added olResult
+    olMath: body.olMath,      // Added olMath
+    olEnglish: body.olEnglish, // Added olEnglish
     whatsappNumber: body.whatsappNumber,
     phoneNumber: body.phoneNumber,
     address: body.address,
@@ -318,12 +323,19 @@ export async function verifyAndRegisterStudent(req, res, next) {
       association = enrollment;
     }
 
+    // UPDATE: Inserting new fields into creation query
     const created = await Student.create({
       fullName: safeTrim(studentData.fullName),
       email: normalizedEmail,
       studentId: safeTrim(studentData.studentId),
+      dob: studentData.dob,                       // Added dob
+      gender: safeTrim(studentData.gender),       // Added gender
       nic: safeTrim(studentData.nic),
       course: safeTrim(studentData.course),
+      school: safeTrim(studentData.school),       // Added school
+      olResult: safeTrim(studentData.olResult),   // Added olResult
+      olMath: safeTrim(studentData.olMath),       // Added olMath
+      olEnglish: safeTrim(studentData.olEnglish), // Added olEnglish
       whatsappNumber: safeTrim(studentData.whatsappNumber),
       phoneNumber: safeTrim(studentData.phoneNumber),
       address: safeTrim(studentData.address),
@@ -356,7 +368,6 @@ export async function verifyAndRegisterStudent(req, res, next) {
 
 export { verifyAndRegisterStudent as registerStudent };
 
-// Temporary no-OTP registration (controlled via DISABLE_OTP env var)
 export async function registerWithoutOtp(req, res, next) {
   try {
     const studentData = getStudentRegistrationFields(req.body || {});
@@ -403,12 +414,19 @@ export async function registerWithoutOtp(req, res, next) {
       association = enrollment;
     }
 
+    // UPDATE: Inserting new fields into creation query
     const created = await Student.create({
       fullName: safeTrim(studentData.fullName),
       email: normalizedEmail,
       studentId: safeTrim(studentData.studentId),
+      dob: studentData.dob,
+      gender: safeTrim(studentData.gender),
       nic: safeTrim(studentData.nic),
       course: safeTrim(studentData.course),
+      school: safeTrim(studentData.school),
+      olResult: safeTrim(studentData.olResult),
+      olMath: safeTrim(studentData.olMath),
+      olEnglish: safeTrim(studentData.olEnglish),
       whatsappNumber: safeTrim(studentData.whatsappNumber),
       phoneNumber: safeTrim(studentData.phoneNumber),
       address: safeTrim(studentData.address),
@@ -508,6 +526,7 @@ async function resolveBranchEnrollment(branchId, intakeId, batchId) {
   return { branchId: safeBranchId, intakeId: safeIntakeId };
 }
 
+// UPDATE: Exposing the new fields to the frontend upon successful login/registration
 function toMePayload(student) {
   const fullName = student.fullName;
   const firstName = fullName.split(' ')[0] || fullName;
@@ -518,8 +537,14 @@ function toMePayload(student) {
     firstName,
     email: student.email,
     studentId: student.studentId,
+    dob: student.dob,
+    gender: student.gender,
     nic: student.nic,
     course: student.course,
+    school: student.school,
+    olResult: student.olResult,
+    olMath: student.olMath,
+    olEnglish: student.olEnglish,
     whatsappNumber: student.whatsappNumber,
     phoneNumber: student.phoneNumber,
     address: student.address,
@@ -604,7 +629,6 @@ export async function forgotStudentPassword(req, res, next) {
     const id = safeTrim(identifier);
     const normalizedEmail = normalizeEmail(id);
 
-    // Always respond 200 to avoid account enumeration.
     if (!id) return res.json({ ok: true });
 
     const student = await Student.findOne({
@@ -664,7 +688,6 @@ export async function resetStudentPassword(req, res, next) {
     student.resetPasswordTokenExpiresAt = undefined;
     await student.save();
 
-    // Auto sign-in after reset for better UX.
     const authToken = signAuthToken({
       sub: String(student._id),
       role: 'student',
@@ -724,7 +747,6 @@ export async function verifyMailTransport(req, res, next) {
     }
 
     try {
-      // transporter.verify() returns a Promise on modern Node/Nodemailer setups
       await mailer.transporter.verify();
       return res.json({ ok: true, configured: true, from: mailer.from || '' });
     } catch (err) {
@@ -747,7 +769,6 @@ export async function updateAuthMe(req, res, next) {
     const role = req.auth?.role;
     if (!id) return res.status(401).json({ message: 'Unauthorized' });
 
-    // For now only student self-profile update is supported.
     if (role === 'lecturer') return res.status(403).json({ message: 'Forbidden' });
 
     const student = await Student.findById(id);
@@ -795,7 +816,6 @@ export async function changeStudentPassword(req, res, next) {
     const role = req.auth?.role;
     if (!id) return res.status(401).json({ message: 'Unauthorized' });
 
-    // Students only
     if (role === 'lecturer') return res.status(403).json({ message: 'Forbidden' });
 
     const { oldPassword, newPassword } = req.body || {};
