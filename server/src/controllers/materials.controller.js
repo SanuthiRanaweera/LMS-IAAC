@@ -51,12 +51,6 @@ function canonicalCourse(value) {
   return String(value || '').trim();
 }
 
-function buildAbsoluteUrl(req, value) {
-  if (!value) return '';
-  if (/^https?:\/\//i.test(String(value))) return String(value);
-  return `${req.protocol}://${req.get('host')}/${String(value).replace(/^\/+/, '')}`;
-}
-
 function removeUploadedFile(file) {
   if (file?.path && fs.existsSync(file.path)) {
     fs.unlinkSync(file.path);
@@ -756,8 +750,8 @@ export async function downloadMaterial(req, res, next) {
       $inc: { downloadCount: 1 },
     });
 
-    res.json({
-      downloadUrl: buildAbsoluteUrl(req, `api/materials/student/download/${materialId}/content`),
+    return res.json({
+      downloadUrl: `/api/materials/student/download/${materialId}/content`,
       fileName: material.fileName,
       fileSize: material.fileSize,
     });
