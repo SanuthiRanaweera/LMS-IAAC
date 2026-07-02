@@ -23,6 +23,86 @@ const INITIAL_FORM = {
   guardianPhoneNumber: '',
 };
 
+const REQUIRED_FIELDS = [
+  ['fullName', 'Full name is required.'],
+  ['email', 'Email address is required.'],
+  ['studentId', 'Student ID is required.'],
+  ['dob', 'Date of birth is required.'],
+  ['gender', 'Gender is required.'],
+  ['nic', 'NIC / Passport is required.'],
+  ['course', 'Please select a diploma program.'],
+  ['school', 'School name is required.'],
+  ['olResult', 'O/L full result is required.'],
+  ['olMath', 'O/L math result is required.'],
+  ['olEnglish', 'O/L English result is required.'],
+  ['whatsappNumber', 'WhatsApp number is required.'],
+  ['phoneNumber', 'Phone number is required.'],
+  ['address', 'Address is required.'],
+  ['guardianName', 'Guardian name is required.'],
+  ['guardianPhoneNumber', 'Guardian phone number is required.'],
+];
+
+function getBranchType(branchId) {
+  const normalized = String(branchId || '').toLowerCase();
+  if (!normalized) return '';
+  if (normalized.includes('airport')) return 'airport';
+  if (normalized.includes('central') || normalized.includes('academy')) return 'central';
+  if (normalized.includes('city')) return 'city';
+  return '';
+}
+
+function extractBatchTwoDigits(batchId) {
+  const normalized = String(batchId || '');
+  const match = normalized.match(/(\d{2})/);
+  return match ? match[1] : '';
+}
+
+function validateStudentId(studentId, branchId, batchId) {
+  const normalizedStudentId = String(studentId || '').trim().toUpperCase();
+  if (!/^[A-Z0-9]+$/.test(normalizedStudentId)) {
+    return 'Student ID must contain only capital letters and numbers.';
+  }
+
+  const firstTwoDigits = (normalizedStudentId.match(/\d/g) || []).slice(0, 2).join('');
+  const batchTwoDigits = extractBatchTwoDigits(batchId);
+  if (batchTwoDigits && firstTwoDigits !== batchTwoDigits) {
+    return `Student ID must include ${batchTwoDigits} as the first 2 digits to match the selected batch.`;
+  }
+
+  const branchType = getBranchType(branchId);
+  const allowedPrefixesByBranch = {
+    city: ['CC', 'GO', 'TR', 'CG'],
+    airport: ['CCR', 'GOR', 'TRR', 'CGR'],
+    central: ['GOK', 'TRK', 'CGK'],
+  };
+
+  const allowedPrefixes = allowedPrefixesByBranch[branchType] || [];
+  if (allowedPrefixes.length > 0 && !allowedPrefixes.some((prefix) => normalizedStudentId.startsWith(prefix))) {
+    return `Student ID prefix is invalid for this branch. Allowed prefixes: ${allowedPrefixes.join(', ')}.`;
+  }
+
+  return '';
+}
+
+function validateRegistrationForm(form, confirmPassword, linkParams) {
+  for (const [fieldName, message] of REQUIRED_FIELDS) {
+    if (!String(form[fieldName] || '').trim()) {
+      return message;
+    }
+  }
+
+  const studentIdError = validateStudentId(form.studentId, linkParams?.branchId, linkParams?.batchId);
+  if (studentIdError) return studentIdError;
+
+  if (!form.password.trim() || form.password.trim().length < 8) {
+    return 'Password must be at least 8 characters.';
+  }
+  if (String(form.password || '') !== String(confirmPassword || '')) {
+    return 'Passwords do not match.';
+  }
+  return '';
+}
+
 export default function RegisterPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -55,7 +135,12 @@ export default function RegisterPage() {
   }, [step]);
 
   const update = (key) => (event) => {
-    const value = event.target.value;
+    let value = event.target.value;
+    if (key === 'studentId') {
+      value = String(value || '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '');
+    }
     setForm((current) => ({ ...current, [key]: value }));
   };
 
@@ -72,18 +157,8 @@ export default function RegisterPage() {
     setError('');
     setInfo('');
 
-    if (!form.fullName.trim()) return setError('Full name is required.');
-    if (!form.email.trim()) return setError('Email address is required.');
-    if (!form.studentId.trim()) return setError('Student ID is required.');
-    if (!form.course.trim()) return setError('Please select a diploma program.');
-    if (!form.dob.trim()) return setError('Date of birth is required.');
-    if (!form.gender.trim()) return setError('Gender is required.');
-    if (!form.password.trim() || form.password.trim().length < 8) {
-      return setError('Password must be at least 8 characters.');
-    }
-    if (String(form.password || '') !== String(confirmPassword || '')) {
-      return setError('Passwords do not match.');
-    }
+    const validationMessage = validateRegistrationForm(form, confirmPassword, linkParams);
+    if (validationMessage) return setError(validationMessage);
 
     setSendingOtp(true);
     try {
@@ -115,6 +190,9 @@ export default function RegisterPage() {
     setError('');
     setInfo('');
 
+    const validationMessage = validateRegistrationForm(form, confirmPassword, linkParams);
+    if (validationMessage) return setError(validationMessage);
+
     if (!/^[0-9]{6}$/.test(String(otp || '').trim())) {
       return setError('Enter the 6-digit code sent to your email.');
     }
@@ -123,6 +201,7 @@ export default function RegisterPage() {
     try {
       const payload = {
         ...form,
+        studentId: String(form.studentId || '').trim().toUpperCase(),
         otp: String(otp).trim(),
         ...Object.fromEntries(Object.entries(linkParams).filter(([, value]) => value)),
       };
@@ -240,17 +319,17 @@ export default function RegisterPage() {
                           </select>
                         </Field>
                         <Field label="NIC / Passport">
-                          <input value={form.nic} onChange={update('nic')} className={inputClass} placeholder="Optional" />
+                          <input value={form.nic} onChange={update('nic')} className={inputClass} required />
                         </Field>
                         <Field label="WhatsApp Number">
-                          <input value={form.whatsappNumber} onChange={update('whatsappNumber')} className={inputClass} placeholder="Optional" />
+                          <input value={form.whatsappNumber} onChange={update('whatsappNumber')} className={inputClass} required />
                         </Field>
                         <div className="sm:col-span-2 grid gap-5 sm:grid-cols-2">
                             <Field label="Phone Number">
-                            <input value={form.phoneNumber} onChange={update('phoneNumber')} className={inputClass} placeholder="Optional" />
+                            <input value={form.phoneNumber} onChange={update('phoneNumber')} className={inputClass} required />
                             </Field>
                             <Field label="Address">
-                            <input value={form.address} onChange={update('address')} className={inputClass} placeholder="Optional" />
+                            <input value={form.address} onChange={update('address')} className={inputClass} required />
                             </Field>
                         </div>
                       </div>
@@ -261,16 +340,16 @@ export default function RegisterPage() {
                       <h3 className="mb-4 text-xs font-bold uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-2">Educational Background</h3>
                       <div className="grid gap-5 sm:grid-cols-2">
                         <Field label="School Name">
-                          <input value={form.school} onChange={update('school')} className={inputClass} placeholder="Optional" />
+                          <input value={form.school} onChange={update('school')} className={inputClass} required />
                         </Field>
                         <Field label="O/L Full Result">
-                          <input value={form.olResult} onChange={update('olResult')} className={inputClass} placeholder="Optional" />
+                          <input value={form.olResult} onChange={update('olResult')} className={inputClass} required />
                         </Field>
                         <Field label="O/L Math Result">
-                          <input value={form.olMath} onChange={update('olMath')} className={inputClass} placeholder="Optional" />
+                          <input value={form.olMath} onChange={update('olMath')} className={inputClass} required />
                         </Field>
                         <Field label="O/L English Result">
-                          <input value={form.olEnglish} onChange={update('olEnglish')} className={inputClass} placeholder="Optional" />
+                          <input value={form.olEnglish} onChange={update('olEnglish')} className={inputClass} required />
                         </Field>
                       </div>
                     </div>
@@ -281,7 +360,7 @@ export default function RegisterPage() {
                         <h3 className="mb-4 text-xs font-bold uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-2">Academic</h3>
                         <div className="space-y-5">
                           <Field label="Student ID">
-                            <input value={form.studentId} onChange={update('studentId')} className={inputClass} placeholder="IAAC-0001" autoComplete="off" required />
+                            <input value={form.studentId} onChange={update('studentId')} className={inputClass} placeholder="Example: CC08A001" autoComplete="off" required />
                           </Field>
                           
                           {/* UPDATED: Diploma Dropdown */}
@@ -301,10 +380,10 @@ export default function RegisterPage() {
                         <h3 className="mb-4 text-xs font-bold uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-2">Emergency Contact</h3>
                         <div className="space-y-5">
                           <Field label="Guardian Name">
-                            <input value={form.guardianName} onChange={update('guardianName')} className={inputClass} placeholder="Optional" />
+                            <input value={form.guardianName} onChange={update('guardianName')} className={inputClass} required />
                           </Field>
                           <Field label="Guardian Phone">
-                            <input value={form.guardianPhoneNumber} onChange={update('guardianPhoneNumber')} className={inputClass} placeholder="Optional" />
+                            <input value={form.guardianPhoneNumber} onChange={update('guardianPhoneNumber')} className={inputClass} required />
                           </Field>
                         </div>
                       </div>
