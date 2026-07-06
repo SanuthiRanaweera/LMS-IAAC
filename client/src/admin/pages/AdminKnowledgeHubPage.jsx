@@ -18,12 +18,6 @@ export default function AdminKnowledgeHubPage() {
   const [loading, setLoading] = useState(true);
   const [listErr, setListErr] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [branches, setBranches] = useState([]);
-  const [intakes, setIntakes] = useState([]);
-  const [batches, setBatches] = useState([]);
-  const [selectedBranch, setSelectedBranch] = useState('');
-  const [selectedIntake, setSelectedIntake] = useState('');
-  const [selectedBatch, setSelectedBatch] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [images, setImages] = useState([]);
@@ -44,9 +38,6 @@ export default function AdminKnowledgeHubPage() {
 
   useEffect(() => {
     loadItems();
-    apiGet('/api/materials/hierarchy')
-      .then((data) => setBranches(Array.isArray(data?.branches) ? data.branches : []))
-      .catch(() => setBranches([]));
   }, []);
 
   useEffect(() => {
@@ -63,54 +54,6 @@ export default function AdminKnowledgeHubPage() {
   }, []);
 
   useEffect(() => {
-    if (!selectedBranch) {
-      setIntakes([]);
-      setSelectedIntake('');
-      return;
-    }
-
-    let cancelled = false;
-    apiGet(`/api/materials/branches/${encodeURIComponent(selectedBranch)}/intakes`)
-      .then((data) => {
-        if (cancelled) return;
-        setIntakes(Array.isArray(data?.intakes) ? data.intakes : []);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setIntakes([]);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedBranch]);
-
-  useEffect(() => {
-    if (!selectedBranch || !selectedIntake) {
-      setBatches([]);
-      setSelectedBatch('');
-      return;
-    }
-
-    let cancelled = false;
-    apiGet(
-      `/api/materials/branches/${encodeURIComponent(selectedBranch)}/intakes/${encodeURIComponent(selectedIntake)}/batches`
-    )
-      .then((data) => {
-        if (cancelled) return;
-        setBatches(Array.isArray(data?.batches) ? data.batches : []);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setBatches([]);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedBranch, selectedIntake]);
-
-  useEffect(() => {
     const next = images.map((file) => globalThis.URL.createObjectURL(file));
     setPreviewUrls(next);
     return () => {
@@ -119,9 +62,6 @@ export default function AdminKnowledgeHubPage() {
   }, [images]);
 
   const resetForm = () => {
-    setSelectedBranch('');
-    setSelectedIntake('');
-    setSelectedBatch('');
     setTitle('');
     setDescription('');
     setImages([]);
@@ -136,9 +76,6 @@ export default function AdminKnowledgeHubPage() {
 
   const onCreate = async (event) => {
     event.preventDefault();
-    if (!selectedBranch) return setFormErr('Please select a branch.');
-    if (!selectedIntake) return setFormErr('Please select an intake.');
-    if (!selectedBatch) return setFormErr('Please select a batch.');
     if (!title.trim()) return setFormErr('Title is required.');
     if (!description.trim()) return setFormErr('Description is required.');
     if (images.length === 0) return setFormErr('Please add at least one image.');
@@ -150,9 +87,9 @@ export default function AdminKnowledgeHubPage() {
       const apiOrigin = apiBase || (await getApiBaseUrl());
       const formData = new globalThis.FormData();
       formData.append('resourceType', 'gallery');
-      formData.append('branchId', selectedBranch);
-      formData.append('intakeId', selectedIntake);
-      formData.append('batchId', selectedBatch);
+      formData.append('branchId', 'all');
+      formData.append('intakeId', 'all');
+      formData.append('batchId', 'all');
       formData.append('title', title.trim());
       formData.append('description', description.trim());
       images.forEach((file) => formData.append('images', file));
@@ -198,7 +135,7 @@ export default function AdminKnowledgeHubPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-100">Admin publishing</p>
             <h2 className="mt-2 text-2xl font-bold">Knowledge Hub</h2>
             <p className="mt-2 max-w-2xl text-sm text-sky-100">
-              Publish image-rich posts for a selected branch, intake, and batch.
+              Publish image-rich posts that are visible to all students on the Knowledge Hub page.
             </p>
           </div>
           <button
@@ -220,42 +157,6 @@ export default function AdminKnowledgeHubPage() {
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           {formErr && <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{formErr}</div>}
           <form className="grid grid-cols-1 gap-4 md:grid-cols-2" onSubmit={onCreate}>
-            <div>
-              <label className="text-xs font-semibold text-slate-600">Branch *</label>
-              <select value={selectedBranch} onChange={(e) => setSelectedBranch(e.target.value)} className={`mt-1 ${inputCls}`} required>
-                <option value="">Select branch</option>
-                {branches.map((branch) => (
-                  <option key={branch.id ?? branch.name} value={branch.id ?? branch.name}>
-                    {branch.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-slate-600">Intake *</label>
-              <select value={selectedIntake} onChange={(e) => setSelectedIntake(e.target.value)} className={`mt-1 ${inputCls}`} required disabled={!selectedBranch}>
-                <option value="">Select intake</option>
-                {intakes.map((intake) => (
-                  <option key={intake.id ?? intake.name} value={intake.id ?? intake.name}>
-                    {intake.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-slate-600">Batch *</label>
-              <select value={selectedBatch} onChange={(e) => setSelectedBatch(e.target.value)} className={`mt-1 ${inputCls}`} required disabled={!selectedIntake}>
-                <option value="">Select batch</option>
-                {batches.map((batch) => (
-                  <option key={batch.id ?? batch.name} value={batch.id ?? batch.name}>
-                    {batch.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             <div>
               <label className="text-xs font-semibold text-slate-600">Title *</label>
               <input value={title} onChange={(e) => setTitle(e.target.value)} className={`mt-1 ${inputCls}`} required placeholder="Week 3 highlights" />
@@ -306,7 +207,7 @@ export default function AdminKnowledgeHubPage() {
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h3 className="text-sm font-bold text-slate-900">Published posts</h3>
-            <p className="text-xs text-slate-500">Visible to the matching batch in the student Knowledge Hub.</p>
+            <p className="text-xs text-slate-500">Visible to all students in the student Knowledge Hub.</p>
           </div>
           <button type="button" onClick={loadItems} className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
             Refresh
@@ -358,9 +259,7 @@ export default function AdminKnowledgeHubPage() {
 
                   <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                     <span className="rounded-full bg-white px-2.5 py-1">{item.resourceType}</span>
-                    <span className="rounded-full bg-white px-2.5 py-1">{item.branchId}</span>
-                    <span className="rounded-full bg-white px-2.5 py-1">{item.intakeId}</span>
-                    <span className="rounded-full bg-white px-2.5 py-1">{item.batchId}</span>
+                    <span className="rounded-full bg-white px-2.5 py-1">all students</span>
                   </div>
                 </div>
               </article>

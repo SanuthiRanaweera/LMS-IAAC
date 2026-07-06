@@ -134,8 +134,8 @@ export async function listMyHubItems(req, res, next) {
   try {
     const user = await resolveUserBatch(req.auth);
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
-    const visibilityFilter = buildVisibilityFilter(user);
-    if (!visibilityFilter.batchId && !visibilityFilter.intakeId && !visibilityFilter.branchId) {
+    const visibilityFilter = user.role === 'student' ? {} : buildVisibilityFilter(user);
+    if (user.role !== 'student' && !visibilityFilter.batchId && !visibilityFilter.intakeId && !visibilityFilter.branchId) {
       return res.json({ items: [] });
     }
 
@@ -194,12 +194,7 @@ export async function studentDownloadResource(req, res, next) {
     const item = await KnowledgeHubItem.findById(req.params.id).lean();
     if (!item) return res.status(404).json({ message: 'Resource not found' });
 
-    const sameBatch = student.batchId && normalizeId(item.batchId) === normalizeId(student.batchId);
-    const sameIntake = !student.batchId && student.intakeId && normalizeId(item.intakeId) === normalizeId(student.intakeId);
-    const sameBranch = !student.batchId && !student.intakeId && student.branchId && normalizeId(item.branchId) === normalizeId(student.branchId);
-    if (!sameBatch && !sameIntake && !sameBranch) {
-      return res.status(403).json({ message: 'This resource is not available for your batch.' });
-    }
+    // Knowledge Hub is shared across all students, so any authenticated student can download.
     if (item.fileAssetId) {
       const asset = await getFileAssetInfo(item.fileAssetId);
       if (!asset) return res.status(404).json({ message: 'File not found' });
