@@ -247,7 +247,8 @@ export async function listStudents(req, res, next) {
     };
 
     const items = await Student.find(filter)
-      .sort({ createdAt: -1 })
+      .sort({ studentId: 1, createdAt: 1 })
+      .collation({ locale: 'en', numericOrdering: true, strength: 2 })
       .limit(limit)
       .lean();
 

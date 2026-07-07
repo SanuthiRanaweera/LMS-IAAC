@@ -2,6 +2,27 @@ import { useEffect, useMemo, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { apiDelete, apiGet, apiPost, apiPut } from '../../api/http.js';
 
+function compareStudentsByStudentId(a, b) {
+  const rawA = String(a?.studentId || '').trim().toUpperCase();
+  const rawB = String(b?.studentId || '').trim().toUpperCase();
+
+  const numA = Number.parseInt((rawA.match(/(\d+)/) || [])[1] || '', 10);
+  const numB = Number.parseInt((rawB.match(/(\d+)/) || [])[1] || '', 10);
+
+  const prefixA = rawA.replace(/\d+/g, '');
+  const prefixB = rawB.replace(/\d+/g, '');
+
+  if (prefixA !== prefixB) {
+    return prefixA.localeCompare(prefixB, undefined, { sensitivity: 'base' });
+  }
+
+  const safeA = Number.isFinite(numA) ? numA : Number.POSITIVE_INFINITY;
+  const safeB = Number.isFinite(numB) ? numB : Number.POSITIVE_INFINITY;
+  if (safeA !== safeB) return safeA - safeB;
+
+  return rawA.localeCompare(rawB, undefined, { sensitivity: 'base' });
+}
+
 function buildIntakeOptions(branches, branchId) {
   if (!branchId) return [];
   const branch = branches.find((item) => String(item.id) === String(branchId));
@@ -83,6 +104,11 @@ export default function AdminStudentsPage() {
     if (!query) return 'limit=100';
     return `q=${encodeURIComponent(query)}&limit=100`;
   }, [q]);
+
+  const sortedStudents = useMemo(() => {
+    const list = Array.isArray(data?.students) ? data.students : [];
+    return [...list].sort(compareStudentsByStudentId);
+  }, [data]);
 
   const load = () => {
     setError(null);
@@ -404,7 +430,7 @@ export default function AdminStudentsPage() {
           <div className="mt-4 text-sm text-slate-600">Loading…</div>
         ) : (
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full min-w-[860px] text-left text-sm">
               <thead className="text-xs text-slate-500">
                 <tr>
                   <th className="py-2">Name</th>
@@ -415,12 +441,12 @@ export default function AdminStudentsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {data.students.map((s) => (
+                {sortedStudents.map((s) => (
                   <tr key={s.id} className="text-slate-800">
-                    <td className="py-3 font-semibold">{s.fullName}</td>
-                    <td className="py-3">{s.email}</td>
+                    <td className="py-3 font-semibold break-words">{s.fullName}</td>
+                    <td className="py-3 break-all">{s.email}</td>
                     <td className="py-3">{s.studentId}</td>
-                    <td className="py-3">{s.course || '—'}</td>
+                    <td className="py-3 break-words">{s.course || '—'}</td>
                     <td className="py-3 text-right space-x-2">
                       <button
                         type="button"
@@ -464,9 +490,9 @@ export default function AdminStudentsPage() {
 
       {/* Detail modal */}
       {detailStudent || detailLoading || detailError ? (
-        <div className="fixed inset-0 z-50 flex items-start justify-center p-6">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-6">
           <div className="absolute inset-0 bg-black/40" onClick={() => setDetailStudent(null)} />
-          <div className="relative w-full max-w-2xl rounded-lg bg-white p-6 shadow-lg">
+          <div className="relative my-4 max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-lg">
             <div className="flex items-start justify-between">
               <h3 className="text-lg font-bold">Student details</h3>
               <button className="text-sm text-slate-500" onClick={() => setDetailStudent(null)}>Close</button>
@@ -497,9 +523,9 @@ export default function AdminStudentsPage() {
       ) : null}
 
       {editingStudent ? (
-        <div className="fixed inset-0 z-50 flex items-start justify-center p-6">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-6">
           <div className="absolute inset-0 bg-black/40" onClick={() => setEditingStudent(null)} />
-          <form onSubmit={onSaveEdit} className="relative w-full max-w-3xl rounded-lg bg-white p-6 shadow-lg">
+          <form onSubmit={onSaveEdit} className="relative my-4 max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-6 shadow-lg">
             <div className="flex items-start justify-between">
               <h3 className="text-lg font-bold">Edit student enrollment</h3>
               <button type="button" className="text-sm text-slate-500" onClick={() => setEditingStudent(null)}>Close</button>

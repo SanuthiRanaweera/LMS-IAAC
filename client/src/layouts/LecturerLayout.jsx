@@ -64,13 +64,13 @@ export default function LecturerLayout() {
             </div>
 
             {/* Nav */}
-            <nav className="flex flex-1 items-center justify-center gap-2">
+            <nav className="flex flex-1 items-center justify-start gap-2 overflow-x-auto px-3">
               {NAV_LINKS.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}
                   className={({ isActive }) =>
-                    `flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+                    `flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200 ${
                       isActive
                         ? 'bg-sky-50 text-sky-700 shadow-sm'
                         : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'

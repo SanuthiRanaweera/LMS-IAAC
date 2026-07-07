@@ -405,8 +405,8 @@ export default function AdminRecordingsPage() {
       )}
 
       {playing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="relative w-full max-w-3xl overflow-hidden rounded-2xl bg-black shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 sm:items-center">
+          <div className="relative my-4 w-full max-w-3xl overflow-hidden rounded-2xl bg-black shadow-2xl">
             <div className="flex items-center justify-between bg-slate-900 px-4 py-3">
               <p className="truncate pr-4 text-sm font-semibold text-white">{playing.title}</p>
               <button type="button" onClick={() => setPlaying(null)} className="text-slate-400 hover:text-white">

@@ -289,7 +289,7 @@ export default function AdminUsersPage() {
 
         {data ? (
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full min-w-[760px] text-left text-sm">
               <thead className="text-xs text-slate-500">
                 <tr>
                   <th className="py-2">Name</th>
@@ -302,8 +302,8 @@ export default function AdminUsersPage() {
               <tbody className="divide-y divide-slate-200">
                 {users.map((u) => (
                   <tr key={u.id} className="text-slate-800">
-                    <td className="py-3 font-semibold">{u.name}</td>
-                    <td className="py-3">{u.email}</td>
+                    <td className="py-3 font-semibold break-words">{u.name}</td>
+                    <td className="py-3 break-all">{u.email}</td>
                     <td className="py-3">
                       <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${ 
                         u.role === 'superadmin' 
@@ -350,8 +350,8 @@ export default function AdminUsersPage() {
 
       {/* Edit User Modal */}
       {editing && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center">
+          <div className="my-4 max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6">
             <h3 className="text-lg font-bold text-slate-900 mb-4">Edit Account</h3>
             
             {editError && (

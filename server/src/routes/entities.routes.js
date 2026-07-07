@@ -22,8 +22,10 @@ entitiesRouter.get(
           'name fullName studentName firstName lastName studentId studentNo registrationNo email studentEmail phone mobile contactNo contactNumber branchId intakeId batchId course program diploma courseName programName diplomaName createdAt'
         )
         .sort({
-          createdAt: -1,
+          studentId: 1,
+          createdAt: 1,
         })
+        .collation({ locale: 'en', numericOrdering: true, strength: 2 })
         .lean();
 
       return res.json({
@@ -99,8 +101,10 @@ entitiesRouter.get(
           'name fullName studentName firstName lastName studentId studentNo registrationNo email studentEmail phone mobile contactNo contactNumber branchId intakeId batchId course program diploma courseName programName diplomaName createdAt'
         )
         .sort({
-          createdAt: -1,
+          studentId: 1,
+          createdAt: 1,
         })
+        .collation({ locale: 'en', numericOrdering: true, strength: 2 })
         .lean();
 
       return res.json({

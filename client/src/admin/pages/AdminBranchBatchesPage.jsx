@@ -90,6 +90,30 @@ function getStudentId(student) {
   return student?.studentId || student?.studentNo || student?.registrationNo || student?._id || '—';
 }
 
+function parseStudentIdParts(student) {
+  const raw = String(getStudentId(student) || '').trim();
+  const upper = raw.toUpperCase();
+  const numMatch = upper.match(/(\d+)/);
+  const numeric = numMatch ? Number.parseInt(numMatch[1], 10) : Number.POSITIVE_INFINITY;
+  const prefix = upper.replace(/\d+/g, '');
+  return { raw: upper, prefix, numeric };
+}
+
+function compareStudentsByStudentId(a, b) {
+  const aParts = parseStudentIdParts(a);
+  const bParts = parseStudentIdParts(b);
+
+  if (aParts.prefix !== bParts.prefix) {
+    return aParts.prefix.localeCompare(bParts.prefix, undefined, { sensitivity: 'base' });
+  }
+
+  if (aParts.numeric !== bParts.numeric) {
+    return aParts.numeric - bParts.numeric;
+  }
+
+  return aParts.raw.localeCompare(bParts.raw, undefined, { sensitivity: 'base' });
+}
+
 function extractStudents(response) {
   if (Array.isArray(response)) return response;
   if (Array.isArray(response?.students)) return response.students;
@@ -208,7 +232,7 @@ export default function AdminBranchBatchesPage() {
           return sameBranch && sameIntake && sameCourse;
         });
 
-        nextStudentsByBatch[diplomaId] = students;
+        nextStudentsByBatch[diplomaId] = students.sort(compareStudentsByStudentId);
       });
     } catch (err) {
       console.error('Failed to load students:', err);
@@ -245,7 +269,7 @@ export default function AdminBranchBatchesPage() {
 
   const selectedBatchStudents = useMemo(() => {
     if (!selectedBatch?.id) return [];
-    return studentsByBatch[selectedBatch.id] || [];
+    return [...(studentsByBatch[selectedBatch.id] || [])].sort(compareStudentsByStudentId);
   }, [studentsByBatch, selectedBatch]);
 
   function getStudentCount(batch) {
@@ -480,9 +504,9 @@ export default function AdminBranchBatchesPage() {
       />
 
       {studentsModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[85vh] w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-start justify-between border-b border-slate-200 px-6 py-5">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:items-center">
+          <div className="my-4 max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-200 bg-white px-6 py-5">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">
                   Registered Students
@@ -501,7 +525,7 @@ export default function AdminBranchBatchesPage() {
               </button>
             </div>
 
-            <div className="max-h-[65vh] overflow-y-auto p-6">
+            <div className="max-h-[calc(92vh-146px)] overflow-y-auto p-6">
               {selectedBatchStudents.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 p-10 text-center">
                   <h3 className="text-base font-bold text-slate-900">
@@ -527,13 +551,13 @@ export default function AdminBranchBatchesPage() {
                     <tbody className="divide-y divide-slate-100">
                       {selectedBatchStudents.map((student) => (
                         <tr key={student?._id || student?.id || getStudentId(student)}>
-                          <td className="px-4 py-3 font-semibold text-slate-900">
+                          <td className="px-4 py-3 font-semibold text-slate-900 break-words">
                             {getStudentName(student)}
                           </td>
                           <td className="px-4 py-3 text-slate-600">
                             {getStudentId(student)}
                           </td>
-                          <td className="px-4 py-3 text-slate-600">
+                          <td className="px-4 py-3 text-slate-600 break-all">
                             {getStudentEmail(student)}
                           </td>
                           <td className="px-4 py-3 text-slate-600">
@@ -550,7 +574,7 @@ export default function AdminBranchBatchesPage() {
               )}
             </div>
 
-            <div className="flex justify-end border-t border-slate-200 px-6 py-4">
+            <div className="sticky bottom-0 z-10 flex justify-end border-t border-slate-200 bg-white px-6 py-4">
               <button
                 type="button"
                 onClick={() => setStudentsModalOpen(false)}

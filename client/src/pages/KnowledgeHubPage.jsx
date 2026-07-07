@@ -169,8 +169,8 @@ export default function KnowledgeHubPage() {
       )}
 
       {activePost && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/70 p-4 sm:items-center">
+          <div className="my-4 max-h-[92vh] w-full max-w-3xl overflow-hidden rounded-3xl bg-white shadow-2xl">
             <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
@@ -187,7 +187,7 @@ export default function KnowledgeHubPage() {
               </button>
             </div>
 
-            <div className="max-h-[calc(90vh-88px)] space-y-4 overflow-y-auto px-6 py-5">
+            <div className="max-h-[calc(92vh-88px)] space-y-4 overflow-y-auto px-6 py-5">
               {activePost.description && (
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700">{activePost.description}</p>
