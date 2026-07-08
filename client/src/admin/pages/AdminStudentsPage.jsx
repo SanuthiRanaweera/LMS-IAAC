@@ -525,19 +525,20 @@ export default function AdminStudentsPage() {
       {editingStudent ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-6">
           <div className="absolute inset-0 bg-black/40" onClick={() => setEditingStudent(null)} />
-          <form onSubmit={onSaveEdit} className="relative my-4 max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-6 shadow-lg">
-            <div className="flex items-start justify-between">
+          <form onSubmit={onSaveEdit} className="relative my-4 flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white shadow-lg">
+            <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
               <h3 className="text-lg font-bold">Edit student enrollment</h3>
               <button type="button" className="text-sm text-slate-500" onClick={() => setEditingStudent(null)}>Close</button>
             </div>
 
-            {editError ? (
-              <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
-                {editError.message || 'Failed to update student.'}
-              </div>
-            ) : null}
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              {editError ? (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+                  {editError.message || 'Failed to update student.'}
+                </div>
+              ) : null}
 
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="text-xs font-semibold text-slate-600">Full name</label>
                 <input value={editForm.fullName} onChange={updateEdit('fullName')} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" required />
@@ -609,8 +610,9 @@ export default function AdminStudentsPage() {
                 <input value={editForm.guardianPhoneNumber} onChange={updateEdit('guardianPhoneNumber')} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" />
               </div>
             </div>
+            </div>
 
-            <div className="mt-6 flex justify-end gap-3">
+            <div className="flex justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
               <button type="button" onClick={() => setEditingStudent(null)} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 Cancel
               </button>
