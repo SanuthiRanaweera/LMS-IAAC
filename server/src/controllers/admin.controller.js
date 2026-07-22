@@ -51,8 +51,9 @@ async function resolveStudentEnrollment(branchId, intakeId, batchId) {
     return { branchId: '', intakeId: '', batchId: '' };
   }
 
-  if (!safeBranchId || !safeIntakeId || !safeBatchId) {
-    return { error: 'Branch, intake, and batch are required for student enrollment' };
+  // Only require branch and intake; batchId is optional
+  if (!safeBranchId || !safeIntakeId) {
+    return { error: 'Branch and intake (batch) are required for student enrollment' };
   }
 
   const payload = await getOrCreateAppDataPayload('academics', { branches: DEFAULT_LMS_DATA?.academics?.branches || [] });
@@ -69,24 +70,7 @@ async function resolveStudentEnrollment(branchId, intakeId, batchId) {
   );
   if (!intake) return { error: 'Invalid intake selection' };
 
-  const batches = Array.isArray(intake?.batches) ? intake.batches : [];
-  if (batches.length === 0) {
-    return {
-      branchId: safeBranchId,
-      intakeId: safeIntakeId,
-      batchId: '',
-    };
-  }
-
-  if (!safeBatchId) {
-    return { error: 'Batch is required for the selected intake' };
-  }
-
-  const batch = batches.find(
-    (item) => normalizeId(item?.id || item?._id || item?.key || item?.code || item?.name) === normalizeId(safeBatchId)
-  );
-  if (!batch) return { error: 'Invalid batch selection' };
-
+  // Batch is optional - return with empty batchId if not provided
   return {
     branchId: safeBranchId,
     intakeId: safeIntakeId,
