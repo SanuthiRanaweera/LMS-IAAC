@@ -129,18 +129,24 @@ export default function AdminStudentsPage() {
       .catch((err) => setHierarchyError(err));
   }, []);
 
+  // Auto-set intake when branch changes
   useEffect(() => {
     if (!form.branchId) {
       setForm((current) => ({ ...current, intakeId: '', batchId: '' }));
-      return;
+    } else if (createIntakes.length > 0 && !form.intakeId) {
+      setForm((current) => ({ ...current, intakeId: createIntakes[0].id, batchId: '' }));
+    }
+  }, [form.branchId, createIntakes]);
+
+  // Validate intake and batch selections
+  useEffect(() => {
+    if (!form.branchId) return;
+
+    if (form.intakeId && !createIntakes.some((item) => String(item.id) === String(form.intakeId))) {
+      setForm((current) => ({ ...current, intakeId: createIntakes.length > 0 ? createIntakes[0].id : '', batchId: '' }));
     }
 
-    if (!createIntakes.some((item) => String(item.id) === String(form.intakeId))) {
-      setForm((current) => ({ ...current, intakeId: '', batchId: '' }));
-      return;
-    }
-
-    if (!createBatches.some((item) => String(item.id) === String(form.batchId))) {
+    if (form.batchId && !createBatches.some((item) => String(item.id) === String(form.batchId))) {
       setForm((current) => ({ ...current, batchId: '' }));
     }
   }, [form.branchId, form.intakeId, form.batchId, createIntakes, createBatches]);
@@ -149,19 +155,20 @@ export default function AdminStudentsPage() {
     if (!editingStudent) return;
 
     if (!editForm.branchId) {
-      setEditForm((current) => ({ ...current, intakeId: '', batchId: '' }));
+      setEditForm((current) => ({ ...current, intakeId: '' }));
+      return;
+    }
+
+    // Auto-set intake to the first available intake for this branch
+    if (editIntakes.length > 0 && !editForm.intakeId) {
+      setEditForm((current) => ({ ...current, intakeId: editIntakes[0].id }));
       return;
     }
 
     if (!editIntakes.some((item) => String(item.id) === String(editForm.intakeId))) {
-      setEditForm((current) => ({ ...current, intakeId: '', batchId: '' }));
-      return;
+      setEditForm((current) => ({ ...current, intakeId: editIntakes.length > 0 ? editIntakes[0].id : '' }));
     }
-
-    if (!editBatches.some((item) => String(item.id) === String(editForm.batchId))) {
-      setEditForm((current) => ({ ...current, batchId: '' }));
-    }
-  }, [editingStudent, editForm.branchId, editForm.intakeId, editForm.batchId, editIntakes, editBatches]);
+  }, [editingStudent, editForm.branchId, editForm.intakeId, editIntakes]);
 
   const update = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
   const updateEdit = (key) => (e) => setEditForm((f) => ({ ...f, [key]: e.target.value }));
@@ -278,13 +285,13 @@ export default function AdminStudentsPage() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-600">Date of Birth</label>
-                <input value={form.dob} onChange={update('dob')} type="date" className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" />
+                <label className="text-xs font-semibold text-slate-600">Date of Birth *</label>
+                <input value={form.dob} onChange={update('dob')} type="date" required className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-600">Gender</label>
-                <select value={form.gender} onChange={update('gender')} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100">
+                <label className="text-xs font-semibold text-slate-600">Gender *</label>
+                <select value={form.gender} onChange={update('gender')} required className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100">
                   <option value="">Select...</option>
                   <option value="male">Male</option>
                   <option value="female">Female</option>
@@ -338,11 +345,7 @@ export default function AdminStudentsPage() {
 
           <div>
             <h4 className="mb-2 text-xs font-semibold text-slate-600">Academic</h4>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div>
-                <label className="text-xs font-semibold text-slate-600">Course</label>
-                <input value={form.course} onChange={update('course')} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" />
-              </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div>
                 <label className="text-xs font-semibold text-slate-600">Branch</label>
                 <select value={form.branchId} onChange={update('branchId')} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100">
@@ -353,25 +356,23 @@ export default function AdminStudentsPage() {
                 </select>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-600">Intake</label>
+                <label className="text-xs font-semibold text-slate-600">Batch</label>
                 <select value={form.intakeId} onChange={update('intakeId')} disabled={!form.branchId} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 disabled:bg-slate-50">
-                  <option value="">Select intake</option>
+                  <option value="">Select batch</option>
                   {createIntakes.map((intake) => (
                     <option key={intake.id} value={intake.id}>{intake.name}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-600">Batch</label>
-                <select value={form.batchId} onChange={update('batchId')} disabled={!form.intakeId || createBatches.length === 0} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 disabled:bg-slate-50">
-                  <option value="">Select batch</option>
-                  {createBatches.map((batch) => (
-                    <option key={batch.id} value={batch.id}>{batch.name}</option>
-                  ))}
+                <label className="text-xs font-semibold text-slate-600">Diploma</label>
+                <select value={form.course} onChange={update('course')} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100">
+                  <option value="">Select diploma</option>
+                  <option value="Cabin Crew">Cabin Crew</option>
+                  <option value="Ground Operations">Ground Operations</option>
+                  <option value="Ticketing & Reservations">Ticketing & Reservations</option>
+                  <option value="Air Cargo">Air Cargo</option>
                 </select>
-                {form.intakeId && createBatches.length === 0 ? (
-                  <p className="mt-1 text-xs text-slate-500">This intake has no batches. Enrollment will be saved at intake level.</p>
-                ) : null}
               </div>
             </div>
           </div>
@@ -553,7 +554,13 @@ export default function AdminStudentsPage() {
               </div>
               <div>
                 <label className="text-xs font-semibold text-slate-600">Course</label>
-                <input value={editForm.course} onChange={updateEdit('course')} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" />
+                <select value={editForm.course} onChange={updateEdit('course')} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100">
+                  <option value="">Select diploma</option>
+                  <option value="Cabin Crew">Cabin Crew</option>
+                  <option value="Ground Operations">Ground Operations</option>
+                  <option value="Ticketing & Reservations">Ticketing & Reservations</option>
+                  <option value="Air Cargo">Air Cargo</option>
+                </select>
               </div>
               <div>
                 <label className="text-xs font-semibold text-slate-600">Branch</label>
@@ -565,25 +572,13 @@ export default function AdminStudentsPage() {
                 </select>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-600">Intake</label>
+                <label className="text-xs font-semibold text-slate-600">Batch</label>
                 <select value={editForm.intakeId} onChange={updateEdit('intakeId')} disabled={!editForm.branchId} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 disabled:bg-slate-50">
-                  <option value="">Select intake</option>
+                  <option value="">Select batch</option>
                   {editIntakes.map((intake) => (
                     <option key={intake.id} value={intake.id}>{intake.name}</option>
                   ))}
                 </select>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-600">Batch</label>
-                <select value={editForm.batchId} onChange={updateEdit('batchId')} disabled={!editForm.intakeId || editBatches.length === 0} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 disabled:bg-slate-50">
-                  <option value="">Select batch</option>
-                  {editBatches.map((batch) => (
-                    <option key={batch.id} value={batch.id}>{batch.name}</option>
-                  ))}
-                </select>
-                {editForm.intakeId && editBatches.length === 0 ? (
-                  <p className="mt-1 text-xs text-slate-500">This intake has no batches. Enrollment will be saved at intake level.</p>
-                ) : null}
               </div>
               <div>
                 <label className="text-xs font-semibold text-slate-600">Phone</label>

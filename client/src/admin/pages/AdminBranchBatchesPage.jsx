@@ -204,17 +204,17 @@ export default function AdminBranchBatchesPage() {
 
       const currentBranchId = normalizeText(branchId);
       const currentIntakeId = normalizeText(intakeId);
-      const currentIntakeName = normalizeText(resolvedIntakeName || intakeName);
 
       batches.forEach((batch) => {
         const diplomaId = normalizeText(batch?.id);
-        const diplomaCourse = courseFromBatchName(batch?.name);
+        const diplomaCourse = canonicalCourse(batch?.name);
 
-        if (!diplomaId || !diplomaCourse || !currentBranchId) {
+        if (!diplomaId || !currentBranchId || !currentIntakeId) {
           nextStudentsByBatch[diplomaId] = [];
           return;
         }
 
+        // Filter students by branch, intake, AND course/diploma
         const students = allStudents.filter((student) => {
           const studentBranchId = getStudentBranchId(student);
           const studentIntakeValue = getStudentIntakeValue(student);
@@ -225,7 +225,7 @@ export default function AdminBranchBatchesPage() {
 
           const sameIntake =
             normalizeComparable(studentIntakeValue) === normalizeComparable(currentIntakeId) ||
-            normalizeComparable(studentIntakeValue) === normalizeComparable(currentIntakeName);
+            normalizeComparable(studentIntakeValue) === normalizeComparable(resolvedIntakeName);
 
           const sameCourse = studentCourse === diplomaCourse;
 

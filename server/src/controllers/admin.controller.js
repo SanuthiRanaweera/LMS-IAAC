@@ -338,6 +338,8 @@ export async function createStudentByAdmin(req, res, next) {
       fullName,
       email,
       studentId,
+      dob,
+      gender,
       nic,
       course,
       whatsappNumber,
@@ -356,6 +358,10 @@ export async function createStudentByAdmin(req, res, next) {
     if (!safeTrim(fullName)) return res.status(400).json({ message: 'Name is required' });
     if (!safeTrim(studentId)) return res.status(400).json({ message: 'Student ID is required' });
     if (!isValidEmail(normalizedEmail)) return res.status(400).json({ message: 'Valid email is required' });
+    if (!dob) return res.status(400).json({ message: 'Date of birth is required' });
+    if (!gender || !['male', 'female', 'other'].includes(String(gender).toLowerCase())) {
+      return res.status(400).json({ message: 'Valid gender is required' });
+    }
     if (typeof password !== 'string' || password.trim().length < 8) {
       return res.status(400).json({ message: 'Password must be at least 8 characters' });
     }
@@ -377,6 +383,8 @@ export async function createStudentByAdmin(req, res, next) {
       fullName: safeTrim(fullName),
       email: normalizedEmail,
       studentId: safeTrim(studentId),
+      dob,
+      gender: String(gender).toLowerCase(),
       nic: safeTrim(nic),
       course: canonicalCourse(course),
       whatsappNumber: safeTrim(whatsappNumber),
