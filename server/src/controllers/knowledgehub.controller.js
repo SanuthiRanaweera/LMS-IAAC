@@ -247,12 +247,12 @@ export async function lecturerAddHubItem(req, res, next) {
     if (resourceType === 'file') {
       if (!req.file) return res.status(400).json({ message: 'File is required for type "file"' });
       if (!ALLOWED_FILE_MIMES.has(req.file.mimetype)) {
-        fs.unlinkSync(req.file.path);
+        removeUploadedFiles([req.file]);
         return res.status(400).json({ message: 'Invalid file type. Only PDF, DOCX, PPTX, XLSX, ZIP allowed.' });
       }
       const ext = path.extname(req.file.originalname).toLowerCase();
       if (!ALLOWED_FILE_EXTS.has(ext)) {
-        fs.unlinkSync(req.file.path);
+        removeUploadedFiles([req.file]);
         return res.status(400).json({ message: 'Invalid file extension.' });
       }
       fileAssetId = await storeFileUpload(req.file, {

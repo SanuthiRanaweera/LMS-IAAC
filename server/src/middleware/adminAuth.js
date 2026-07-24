@@ -48,6 +48,8 @@ export function isStaffAllowedAction(action) {
     'ADD_MATERIALS',
     'EDIT_MATERIALS',
     'DELETE_MATERIALS',
+    'ADD_ASSIGNMENTS',
+    'VIEW_ASSIGNMENTS',
     'ADD_SCHEDULE',
     'VIEW_STUDENTS',
     'CREATE_STUDENT',

@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import multer from 'multer';
-import path from 'path';
 import { requireAdmin, requirePermission } from '../middleware/adminAuth.js';
 import { requireAuth, requireStudent } from '../middleware/auth.js';
 import {
@@ -18,17 +17,6 @@ import {
 } from '../controllers/materials.controller.js';
 
 export const materialsRouter = Router();
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/materials/');
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const extension = path.extname(file.originalname);
-    cb(null, `material-${uniqueSuffix}${extension}`);
-  },
-});
 
 const fileFilter = (req, file, cb) => {
   const allowedTypes = [
@@ -65,7 +53,7 @@ const fileFilter = (req, file, cb) => {
 };
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   fileFilter,
   limits: {
     fileSize: 100 * 1024 * 1024,
