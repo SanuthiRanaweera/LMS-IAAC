@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import multer from 'multer';
-import path from 'path';
 import { requireAdminRole } from '../middleware/adminAuth.js';
 import { requireAuth, requireLecturer } from '../middleware/auth.js';
 import {
@@ -14,15 +13,8 @@ import {
   adminDeleteHubItem,
 } from '../controllers/knowledgehub.controller.js';
 
-const hubStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/knowledgehub/'),
-  filename: (req, file, cb) => {
-    const suffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `hub-${suffix}${path.extname(file.originalname)}`);
-  },
-});
 const hubUpload = multer({
-  storage: hubStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 200 * 1024 * 1024 }, // 200 MB
 });
 

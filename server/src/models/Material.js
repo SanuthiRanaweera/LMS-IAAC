@@ -26,8 +26,8 @@ const MaterialSchema = new Schema(
     fileName: { type: String, required: true, trim: true, maxlength: 255 },
     fileUrl: { type: String, trim: true, maxlength: 500, default: '' },
     content: { type: String, trim: true, maxlength: 2000, default: '' },
-    fileAssetId: { type: String, trim: true, maxlength: 64, default: '' },
-    imageAssetId: { type: String, trim: true, maxlength: 64, default: '' },
+    fileAssetId: { type: String, trim: true, maxlength: 255, default: '' },
+    imageAssetId: { type: String, trim: true, maxlength: 255, default: '' },
     fileSize: { type: Number }, // in bytes
     fileType: { type: String, trim: true, maxlength: 50 }, // PDF, DOCX, PPTX, MP4, etc.
     

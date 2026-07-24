@@ -24,11 +24,12 @@ import { knowledgeHubRouter, knowledgeHubAdminRouter } from './routes/knowledgeh
 import { feedbackRouter } from './routes/feedback.routes.js';
 import { adminFeedbackRouter } from './routes/adminFeedback.routes.js';
 import { lecturersRouter } from './routes/lecturers.routes.js';
+import { adminAssignmentsRouter, studentAssignmentsRouter } from './routes/assignments.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Ensure upload directories exist
-['uploads/recordings', 'uploads/knowledgehub', 'uploads/materials'].forEach((dir) => {
+['uploads/recordings', 'uploads/knowledgehub', 'uploads/materials', 'uploads/assignments'].forEach((dir) => {
   const abs = path.resolve(__dirname, '..', dir);
   if (!fs.existsSync(abs)) fs.mkdirSync(abs, { recursive: true });
 });
@@ -87,6 +88,7 @@ export function createServer() {
   app.use('/api/admin/schedule', requireAdmin, scheduleAdminRouter);
   app.use('/api/admin/recordings', requireAdmin, recordingsAdminRouter);
   app.use('/api/admin/knowledge-hub', requireAdmin, knowledgeHubAdminRouter);
+  app.use('/api/admin/assignments', requireAdmin, adminAssignmentsRouter);
 
   // Weekly feedback module (superadmin only on admin side)
   app.use('/api/admin/feedback', adminFeedbackRouter);
@@ -102,6 +104,7 @@ export function createServer() {
   app.use('/api/schedule', scheduleRouter);
   app.use('/api/recordings', recordingsRouter);
   app.use('/api/knowledge-hub', knowledgeHubRouter);
+  app.use('/api/student/assignments', studentAssignmentsRouter);
 
   // Lecturers directory + feedback endpoints (student/lecturer)
   app.use('/api/lecturers', lecturersRouter);

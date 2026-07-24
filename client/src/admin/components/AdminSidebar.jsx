@@ -3,6 +3,7 @@ import {
   BookOpen,
   Calendar,
   FileText,
+  FileUp,
   LayoutDashboard,
   Users,
   GraduationCap,
@@ -26,6 +27,7 @@ const NAV = [
   },
   { label: 'Class Schedule', to: '/admin/schedule', icon: Calendar },
   { label: 'Study Materials', to: '/admin/materials/upload', icon: FileText },
+  { label: 'Assignments', to: '/admin/assignments', icon: FileUp },
   {
     label: 'Recordings',
     to: '/admin/recordings',
