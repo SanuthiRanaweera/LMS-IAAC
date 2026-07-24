@@ -105,7 +105,7 @@ function toAdminListItem(admin) {
 
 export async function getAdminMetrics(req, res, next) {
   try {
-    const [students, admins, materials, recentMaterials] = await Promise.all([
+    const [students, admins, materials, recentMaterials, academicsPayload, groupedStudentsByBranch] = await Promise.all([
       Student.countDocuments(),
       Admin.countDocuments(),
       Material.countDocuments({ isActive: true }),
@@ -114,7 +114,62 @@ export async function getAdminMetrics(req, res, next) {
         .limit(5)
         .select('title course weekNumber branchId batchId uploadedByName createdAt')
         .lean(),
+      getOrCreateAppDataPayload('academics', {
+        branches: DEFAULT_LMS_DATA?.academics?.branches || [],
+      }),
+      Student.aggregate([
+        {
+          $match: {
+            branchId: { $exists: true, $ne: '' },
+          },
+        },
+        {
+          $group: {
+            _id: '$branchId',
+            count: { $sum: 1 },
+          },
+        },
+      ]),
     ]);
+
+    const branchCountMap = new Map(
+      groupedStudentsByBranch.map((item) => [normalizeId(item?._id), Number(item?.count || 0)])
+    );
+
+    const knownBranches = Array.isArray(academicsPayload?.branches) ? academicsPayload.branches : [];
+    const branchStudentCounts = [];
+    const usedBranchIds = new Set();
+
+    knownBranches.forEach((branch) => {
+      const branchId = normalizeId(branch?.id || branch?._id || branch?.key || branch?.code || branch?.name);
+
+      if (!branchId || usedBranchIds.has(branchId)) {
+        return;
+      }
+
+      usedBranchIds.add(branchId);
+
+      branchStudentCounts.push({
+        branchId,
+        branchName: safeTrim(branch?.name) || branchId,
+        studentCount: branchCountMap.get(branchId) || 0,
+      });
+    });
+
+    // Include students linked to branch IDs that are no longer in the hierarchy payload.
+    branchCountMap.forEach((studentCount, branchId) => {
+      if (usedBranchIds.has(branchId)) {
+        return;
+      }
+
+      branchStudentCounts.push({
+        branchId,
+        branchName: branchId,
+        studentCount,
+      });
+    });
+
+    branchStudentCounts.sort((a, b) => String(a.branchName).localeCompare(String(b.branchName)));
 
     const programmesDoc = await AppData.findOne({ key: 'programmes' }).lean();
     const programmes = Array.isArray(programmesDoc?.payload?.programmes)
@@ -125,6 +180,7 @@ export async function getAdminMetrics(req, res, next) {
       students,
       users: admins,
       materials,
+      branchStudentCounts,
       recentMaterials: recentMaterials.map((item) => ({
         id: String(item._id),
         title: item.title,

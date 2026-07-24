@@ -55,14 +55,29 @@ export default function AdminDashboardPage() {
         <StatCard label="Students" value={metrics ? metrics.students : '—'} />
         <StatCard label="Users" value={metrics ? metrics.users : '—'} />
         <StatCard label="Study Materials" value={metrics ? metrics.materials : '—'} />
-        <StatCard label="Programmes" value={metrics ? metrics.programmes : '—'} />
       </section>
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total Income" value={metrics ? metrics.totalIncome : '—'} />
-        <StatCard label="Awaiting Payments" value={metrics ? metrics.awaitingPayments : '—'} />
-        <StatCard label="Pending Approval" value={metrics ? metrics.pendingApproval : '—'} />
-        <StatCard label="Rejected Payments" value={metrics ? metrics.rejectedPayments : '—'} />
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-4">
+          <div className="text-sm font-bold text-slate-900">Students by Branch</div>
+          <p className="mt-1 text-xs text-slate-500">Current student count grouped by branch.</p>
+        </div>
+
+        {!Array.isArray(metrics?.branchStudentCounts) || metrics.branchStudentCounts.length === 0 ? (
+          <div className="text-sm text-slate-500">No branch-wise student data available.</div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {metrics.branchStudentCounts.map((item) => (
+              <div
+                key={item.branchId}
+                className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
+              >
+                <div className="text-sm font-semibold text-slate-800">{item.branchName}</div>
+                <div className="text-base font-bold text-slate-900">{item.studentCount}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
