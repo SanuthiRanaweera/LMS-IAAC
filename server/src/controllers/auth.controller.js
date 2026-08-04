@@ -7,7 +7,6 @@ import { Otp } from '../models/Otp.js';
 import { clearAuthCookie, setAuthCookie, signAuthToken } from '../middleware/auth.js';
 import { DEFAULT_LMS_DATA } from '../data/defaultLmsData.js';
 import { getOrCreateAppDataPayload } from '../services/appData.service.js';
-import { buildPasswordResetUrl } from '../utils/passwordReset.js';
 
 function isNonEmptyString(v) {
   return typeof v === 'string' && v.trim().length > 0;
@@ -61,7 +60,7 @@ async function maybeSendPasswordResetEmail({ toEmail, resetUrl }) {
 
   if (!host || !from || !toEmail || !resetUrl) {
     if (resetUrl) console.log(`[password-reset] ${toEmail || '(unknown)'} -> ${resetUrl}`);
-    return { ok: false, configured: false };
+    return;
   }
 
   try {
@@ -78,56 +77,9 @@ async function maybeSendPasswordResetEmail({ toEmail, resetUrl }) {
       subject: 'Reset your IAAC Student Portal password',
       text: `You requested a password reset.\n\nReset link (valid for 1 hour):\n${resetUrl}\n\nIf you did not request this, you can ignore this email.`,
     });
-    return { ok: true, configured: true };
   } catch (err) {
     console.log(`[password-reset] email send failed for ${toEmail}: ${err?.message || String(err)}`);
     console.log(`[password-reset] fallback URL: ${resetUrl}`);
-    return { ok: false, configured: true };
-  }
-}
-
-async function sendPasswordResetOtpEmail({ toEmail, otp }) {
-  const mailer = mailTransport();
-  const subject = 'Your IAAC Student Portal password reset code';
-  const html = `
-    <div style="margin:0;padding:0;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;">
-      <div style="max-width:640px;margin:0 auto;padding:32px 20px;">
-        <div style="background:#003580;color:#fff;border-radius:24px 24px 0 0;padding:28px 32px;">
-          <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;opacity:0.8;">IAAC Student Portal</div>
-          <div style="font-size:30px;font-weight:700;margin-top:8px;line-height:1.2;">Reset your password</div>
-        </div>
-        <div style="background:#ffffff;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 24px 24px;padding:32px;">
-          <p style="margin:0 0 16px;color:#0f172a;font-size:15px;line-height:1.7;">Use the one-time code below to verify your identity and choose a new password. This code expires in 10 minutes.</p>
-          <div style="margin:28px 0;text-align:center;">
-            <div style="display:inline-block;min-width:220px;padding:18px 24px;border-radius:18px;background:#eff6ff;border:1px solid #bfdbfe;color:#003580;font-size:34px;font-weight:800;letter-spacing:0.28em;">${otp}</div>
-          </div>
-          <p style="margin:0;color:#475569;font-size:13px;line-height:1.7;">If you did not request this reset, you can safely ignore this message.</p>
-        </div>
-      </div>
-    </div>
-  `;
-  const text = `Your IAAC Student Portal password reset code is ${otp}.\n\nThis code expires in 10 minutes. If you did not request this, ignore this email.`;
-
-  if (!mailer?.transporter || !mailer?.from || !toEmail) {
-    console.log('[password-reset-otp] Mailer is not configured correctly.');
-    const err = new Error('Unable to send reset code right now. Please try again shortly.');
-    err.status = 503;
-    throw err;
-  }
-
-  try {
-    await mailer.transporter.sendMail({
-      from: mailer.from,
-      to: toEmail,
-      subject,
-      text,
-      html,
-    });
-  } catch (err) {
-    console.log(`[password-reset-otp] email send failed for ${toEmail}: ${err?.message || String(err)}`);
-    const mailErr = new Error('Unable to send reset code right now. Please try again shortly.');
-    mailErr.status = 503;
-    throw mailErr;
   }
 }
 
@@ -677,46 +629,34 @@ export async function forgotStudentPassword(req, res, next) {
     const id = safeTrim(identifier);
     const normalizedEmail = normalizeEmail(id);
 
-    if (!id) {
-      return res.status(400).json({ message: 'Email or student ID is required' });
-    }
+    if (!id) return res.json({ ok: true });
 
-    let student = await Student.findOne({
+    const student = await Student.findOne({
       $or: [{ email: normalizedEmail }, { studentId: id }],
     });
 
-    if (!student && isValidEmail(normalizedEmail)) {
-      student = await Student.findOne({ email: normalizedEmail });
-    }
-
     if (!student) {
-      return res.json({ ok: true, message: 'If an account exists, a reset code has been prepared.' });
+      return res.json({ ok: true });
     }
 
-    const otp = makeOtp();
-    await Otp.findOneAndUpdate(
-      { email: student.email },
-      { $set: { otp, createdAt: new Date() } },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
+    const token = makeResetToken();
+    const tokenHash = sha256Hex(token);
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
-    try {
-      await sendPasswordResetOtpEmail({ toEmail: student.email, otp });
-    } catch (mailErr) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(`[password-reset] dev fallback active for ${student.email}. Reason: ${mailErr?.message || String(mailErr)}`);
-        return res.json({
-          ok: true,
-          emailSent: false,
-          devOtp: otp,
-          email: student.email,
-          message: 'Email delivery is unavailable in local mode. Use the OTP shown in the response.',
-        });
-      }
-      throw mailErr;
+    student.resetPasswordTokenHash = tokenHash;
+    student.resetPasswordTokenExpiresAt = expiresAt;
+    await student.save();
+
+    const base = appBaseUrl();
+    const resetUrl = base ? `${base}/reset-password?token=${encodeURIComponent(token)}` : '';
+    await maybeSendPasswordResetEmail({ toEmail: student.email, resetUrl });
+
+    const includeToken = envBool('PASSWORD_RESET_RETURN_TOKEN') || process.env.NODE_ENV !== 'production';
+    if (includeToken) {
+      return res.json({ ok: true, token, resetUrl });
     }
 
-    return res.json({ ok: true, emailSent: true, email: student.email, message: 'A 6-digit verification code was sent to your email.' });
+    return res.json({ ok: true });
   } catch (err) {
     next(err);
   }
@@ -724,53 +664,29 @@ export async function forgotStudentPassword(req, res, next) {
 
 export async function resetStudentPassword(req, res, next) {
   try {
-    const { email, otp, token, password } = req.body || {};
-    const safeEmail = normalizeEmail(email);
-    const safeOtp = String(otp || '').trim();
+    const { token, password } = req.body || {};
     const safeToken = safeTrim(token);
     const safePassword = safeTrim(password);
 
+    if (!safeToken) return res.status(400).json({ message: 'Reset token is required' });
     if (!safePassword || safePassword.length < 8) {
       return res.status(400).json({ message: 'Password must be at least 8 characters' });
     }
 
-    let student = null;
-    let pendingOtp = null;
-
-    if (safeEmail && isValidEmail(safeEmail)) {
-      student = await Student.findOne({ email: safeEmail });
-      pendingOtp = await Otp.findOne({ email: safeEmail }).lean();
-    }
-
-    if (!student && safeToken) {
-      const tokenHash = sha256Hex(safeToken);
-      student = await Student.findOne({
-        resetPasswordTokenHash: tokenHash,
-        resetPasswordTokenExpiresAt: { $gt: new Date() },
-      });
-    }
+    const tokenHash = sha256Hex(safeToken);
+    const student = await Student.findOne({
+      resetPasswordTokenHash: tokenHash,
+      resetPasswordTokenExpiresAt: { $gt: new Date() },
+    });
 
     if (!student) {
-      return res.status(400).json({ message: 'Invalid or expired reset code' });
-    }
-
-    if (safeOtp) {
-      if (!pendingOtp || !pendingOtp.createdAt) {
-        return res.status(400).json({ message: 'Invalid or expired reset code' });
-      }
-      const otpAgeMinutes = (Date.now() - new Date(pendingOtp.createdAt).getTime()) / (60 * 1000);
-      if (otpAgeMinutes > 10 || pendingOtp.otp !== safeOtp) {
-        return res.status(400).json({ message: 'Invalid or expired reset code' });
-      }
-    } else if (!safeToken) {
-      return res.status(400).json({ message: 'Reset code is required' });
+      return res.status(400).json({ message: 'Invalid or expired reset token' });
     }
 
     student.passwordHash = await bcrypt.hash(safePassword, 12);
     student.resetPasswordTokenHash = undefined;
     student.resetPasswordTokenExpiresAt = undefined;
     await student.save();
-    await Otp.deleteOne({ email: student.email });
 
     const authToken = signAuthToken({
       sub: String(student._id),
@@ -780,7 +696,7 @@ export async function resetStudentPassword(req, res, next) {
       course: student.course || '',
     });
     setAuthCookie(res, authToken);
-    return res.json({ ok: true, student: toMePayload(student) });
+    return res.json({ student: toMePayload(student) });
   } catch (err) {
     next(err);
   }
