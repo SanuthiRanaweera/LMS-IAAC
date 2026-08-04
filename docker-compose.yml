@@ -9,18 +9,12 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5000
-      CLIENT_ORIGIN: http://localhost
-    restart: unless-stopped
+      CLIENT_ORIGIN: https://iaaccampus.com
+    restart: always
     expose:
       - "5000"
     volumes:
       - backend_uploads:/app/server/uploads
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:5000/api/health >/dev/null 2>&1 || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
 
   frontend:
     build:
@@ -29,12 +23,11 @@ services:
       args:
         VITE_API_BASE_URL: /api
     container_name: lms-frontend
+    restart: always
     depends_on:
-      backend:
-        condition: service_healthy
-    restart: unless-stopped
+      - backend
     ports:
-      - "3000:80"
+      - "8080:80"
 
 volumes:
   backend_uploads:
