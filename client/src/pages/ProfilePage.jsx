@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Eye, EyeOff, GraduationCap, Mail, MapPin, Phone, User } from 'lucide-react';
+import { GraduationCap, Mail, MapPin, Phone, User } from 'lucide-react';
 import { apiGet, apiPatch } from '../api/http.js';
 
 export default function ProfileSettings() {
@@ -13,8 +13,6 @@ export default function ProfileSettings() {
 
   const [pwForm, setPwForm] = useState({ oldPassword: '', newPassword: '' });
   const [pwSaving, setPwSaving] = useState(false);
-  const [showOldPassword, setShowOldPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
 
   const toUserMessage = (err, fallback) => {
     if (err?.status === 401) return 'Your session expired. Please log in again.';
@@ -140,46 +138,20 @@ export default function ProfileSettings() {
             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 font-bold text-slate-900">Security</div>
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Old Password</label>
-                  <div className="relative">
-                    <input
-                      type={showOldPassword ? 'text' : 'password'}
-                      value={pwForm.oldPassword || ''}
-                      onChange={(e) => setPwForm((f) => ({ ...f, oldPassword: e.target.value }))}
-                      placeholder="••••••••"
-                      className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 pr-10 text-sm outline-none focus:ring-2 focus:ring-sky-100 focus:border-sky-400 transition-all"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowOldPassword((v) => !v)}
-                      className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-500"
-                      aria-label={showOldPassword ? 'Hide password' : 'Show password'}
-                    >
-                      {showOldPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">New Password</label>
-                  <div className="relative">
-                    <input
-                      type={showNewPassword ? 'text' : 'password'}
-                      value={pwForm.newPassword || ''}
-                      onChange={(e) => setPwForm((f) => ({ ...f, newPassword: e.target.value }))}
-                      placeholder="••••••••"
-                      className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 pr-10 text-sm outline-none focus:ring-2 focus:ring-sky-100 focus:border-sky-400 transition-all"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowNewPassword((v) => !v)}
-                      className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-500"
-                      aria-label={showNewPassword ? 'Hide password' : 'Show password'}
-                    >
-                      {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
-                  </div>
-                </div>
+                <Input
+                  label="Old Password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={pwForm.oldPassword}
+                  onChange={(e) => setPwForm((f) => ({ ...f, oldPassword: e.target.value }))}
+                />
+                <Input
+                  label="New Password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={pwForm.newPassword}
+                  onChange={(e) => setPwForm((f) => ({ ...f, newPassword: e.target.value }))}
+                />
               </div>
               <div className="flex justify-end mt-4">
                 <button
