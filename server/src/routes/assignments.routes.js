@@ -43,8 +43,32 @@ const adminUpload = multer({
   limits: { fileSize: 25 * 1024 * 1024 },
 });
 
+const studentFileFilter = (req, file, cb) => {
+  const allowedTypes = [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/x-pdf',
+    'application/octet-stream',
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'application/zip',
+  ];
+
+  if (allowedTypes.includes(file.mimetype) || isPdfFile(file)) {
+    cb(null, true);
+    return;
+  }
+
+  cb(new Error('File type not allowed. Please upload PDF, Word, PowerPoint, images, or ZIP files.'), false);
+};
+
 const studentUpload = multer({
   storage: multer.memoryStorage(),
+  fileFilter: studentFileFilter,
   limits: { fileSize: 50 * 1024 * 1024 },
 });
 

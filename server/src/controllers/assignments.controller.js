@@ -376,18 +376,25 @@ export async function submitAssignment(req, res, next) {
 
     const now = new Date();
     const status = now > new Date(assignment.deadline) ? 'Late' : 'Submitted';
-    const upload = await uploadAssignmentFileToR2({
-      folder: `assignments/submissions/${assignment.course}/${assignment.batchId}`,
-      fileName: req.file.originalname,
-      fileBuffer: req.file.buffer,
-      mimeType: req.file.mimetype,
-      metadata: {
-        assignmentid: String(assignment._id),
-        studentid: student.studentId || String(student._id),
-        course: assignment.course,
-        batchid: assignment.batchId,
-      },
-    });
+    let upload;
+    try {
+      upload = await uploadAssignmentFileToR2({
+        folder: `assignments/submissions/${assignment.course}/${assignment.batchId}`,
+        fileName: req.file.originalname,
+        fileBuffer: req.file.buffer,
+        mimeType: req.file.mimetype,
+        metadata: {
+          assignmentid: String(assignment._id),
+          studentid: student.studentId || String(student._id),
+          course: assignment.course,
+          batchid: assignment.batchId,
+        },
+      });
+    } catch (uploadErr) {
+      const errorMessage = uploadErr?.message || 'Failed to upload file to storage.';
+      const statusCode = uploadErr?.status || 500;
+      return res.status(statusCode).json({ message: errorMessage });
+    }
 
     const submission = await Submission.findOneAndUpdate(
       { assignmentId: assignment._id, studentId: student._id },
