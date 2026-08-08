@@ -96,12 +96,18 @@ export async function uploadAssignmentFileToR2({
   }
 
   const objectKey = buildObjectKey(folder || 'assignments', fileName);
+  
+  // Normalize PDF MIME type: if filename is .pdf, always use proper MIME type
+  let contentType = mimeType || 'application/octet-stream';
+  if (String(fileName || '').toLowerCase().endsWith('.pdf')) {
+    contentType = 'application/pdf';
+  }
 
   const command = new PutObjectCommand({
     Bucket: getBucketName(),
     Key: objectKey,
     Body: fileBuffer,
-    ContentType: mimeType || 'application/octet-stream',
+    ContentType: contentType,
     Metadata: Object.fromEntries(
       Object.entries(metadata).map(([key, value]) => [sanitizePathSegment(key).toLowerCase(), sanitizePathSegment(value)])
     ),

@@ -21,10 +21,7 @@ export const materialsRouter = Router();
 
 const isPdfFile = (file) => {
   const extension = path.extname(String(file.originalname || '')).toLowerCase();
-  return (
-    extension === '.pdf' &&
-    ['application/pdf', 'application/octet-stream', 'application/x-pdf'].includes(file.mimetype)
-  );
+  return extension === '.pdf';
 };
 
 const fileFilter = (req, file, cb) => {

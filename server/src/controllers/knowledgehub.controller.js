@@ -32,10 +32,7 @@ const ALLOWED_FILE_EXTS = new Set(['.pdf', '.docx', '.pptx', '.xlsx', '.zip', '.
 
 function isPdfLike(file) {
   const extension = path.extname(String(file?.originalname || '')).toLowerCase();
-  return (
-    extension === '.pdf' &&
-    ['application/pdf', 'application/x-pdf', 'application/octet-stream'].includes(file?.mimetype)
-  );
+  return extension === '.pdf';
 }
 const ALLOWED_IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 const ALLOWED_IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);

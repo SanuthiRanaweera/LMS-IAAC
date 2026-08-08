@@ -145,12 +145,19 @@ function buildByteRange(options = {}) {
 
 async function storeAssetUpload(file, metadata = {}, kind = 'file') {
   const objectKey = buildObjectKey(file?.originalname, metadata, kind);
+  
+  // Normalize PDF MIME type: if filename is .pdf, always use proper MIME type
+  let contentType = file?.mimetype || 'application/octet-stream';
+  if (String(file?.originalname || '').toLowerCase().endsWith('.pdf')) {
+    contentType = 'application/pdf';
+  }
+  
   const command = new PutObjectCommand({
     Bucket: getBucketName(),
     Key: objectKey,
     Body: getUploadBody(file),
     ContentLength: Number.isFinite(file?.size) ? file.size : undefined,
-    ContentType: file?.mimetype || 'application/octet-stream',
+    ContentType: contentType,
     Metadata: normalizeUploadMetadata(file, metadata),
   });
 

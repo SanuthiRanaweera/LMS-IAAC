@@ -12,10 +12,7 @@ import { requireAuth, requireStudent } from '../middleware/auth.js';
 
 const isPdfFile = (file) => {
   const extension = path.extname(String(file.originalname || '')).toLowerCase();
-  return (
-    extension === '.pdf' &&
-    ['application/pdf', 'application/octet-stream', 'application/x-pdf'].includes(file.mimetype)
-  );
+  return extension === '.pdf';
 };
 
 const referenceFileFilter = (req, file, cb) => {
