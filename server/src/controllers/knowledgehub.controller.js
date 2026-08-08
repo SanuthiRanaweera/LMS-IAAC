@@ -25,8 +25,18 @@ const ALLOWED_FILE_MIMES = new Set([
   'application/vnd.ms-excel',
   'application/vnd.ms-powerpoint',
   'text/plain',
+  'application/octet-stream',
+  'application/x-pdf',
 ]);
 const ALLOWED_FILE_EXTS = new Set(['.pdf', '.docx', '.pptx', '.xlsx', '.zip', '.doc', '.xls', '.ppt', '.txt']);
+
+function isPdfLike(file) {
+  const extension = path.extname(String(file?.originalname || '')).toLowerCase();
+  return (
+    extension === '.pdf' &&
+    ['application/pdf', 'application/x-pdf', 'application/octet-stream'].includes(file?.mimetype)
+  );
+}
 const ALLOWED_IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 const ALLOWED_IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
 
@@ -246,7 +256,7 @@ export async function lecturerAddHubItem(req, res, next) {
 
     if (resourceType === 'file') {
       if (!req.file) return res.status(400).json({ message: 'File is required for type "file"' });
-      if (!ALLOWED_FILE_MIMES.has(req.file.mimetype)) {
+      if (!ALLOWED_FILE_MIMES.has(req.file.mimetype) && !isPdfLike(req.file)) {
         removeUploadedFiles([req.file]);
         return res.status(400).json({ message: 'Invalid file type. Only PDF, DOCX, PPTX, XLSX, ZIP allowed.' });
       }
@@ -343,7 +353,7 @@ export async function adminAddHubItem(req, res, next) {
     if (resourceType === 'file') {
       const file = req.file || getUploadedFiles(req, 'file')[0];
       if (!file) return res.status(400).json({ message: 'File is required' });
-      if (!ALLOWED_FILE_MIMES.has(file.mimetype)) {
+      if (!ALLOWED_FILE_MIMES.has(file.mimetype) && !isPdfLike(file)) {
         removeUploadedFiles([file]);
         return res.status(400).json({ message: 'Invalid file type' });
       }

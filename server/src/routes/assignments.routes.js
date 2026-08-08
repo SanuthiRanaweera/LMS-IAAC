@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
+import path from 'path';
 import {
   createAssignment,
   getStudentAssignments,
@@ -8,6 +9,14 @@ import {
 } from '../controllers/assignments.controller.js';
 import { requirePermission } from '../middleware/adminAuth.js';
 import { requireAuth, requireStudent } from '../middleware/auth.js';
+
+const isPdfFile = (file) => {
+  const extension = path.extname(String(file.originalname || '')).toLowerCase();
+  return (
+    extension === '.pdf' &&
+    ['application/pdf', 'application/octet-stream', 'application/x-pdf'].includes(file.mimetype)
+  );
+};
 
 const referenceFileFilter = (req, file, cb) => {
   const allowedTypes = [
@@ -20,7 +29,7 @@ const referenceFileFilter = (req, file, cb) => {
     'image/png',
   ];
 
-  if (allowedTypes.includes(file.mimetype)) {
+  if (allowedTypes.includes(file.mimetype) || isPdfFile(file)) {
     cb(null, true);
     return;
   }

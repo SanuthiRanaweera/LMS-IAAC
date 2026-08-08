@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
+import path from 'path';
 import { requireAdmin, requirePermission } from '../middleware/adminAuth.js';
 import { requireAuth, requireStudent } from '../middleware/auth.js';
 import {
@@ -17,6 +18,14 @@ import {
 } from '../controllers/materials.controller.js';
 
 export const materialsRouter = Router();
+
+const isPdfFile = (file) => {
+  const extension = path.extname(String(file.originalname || '')).toLowerCase();
+  return (
+    extension === '.pdf' &&
+    ['application/pdf', 'application/octet-stream', 'application/x-pdf'].includes(file.mimetype)
+  );
+};
 
 const fileFilter = (req, file, cb) => {
   const allowedTypes = [
@@ -39,7 +48,7 @@ const fileFilter = (req, file, cb) => {
     'image/webp',
   ];
 
-  if (allowedTypes.includes(file.mimetype)) {
+  if (allowedTypes.includes(file.mimetype) || isPdfFile(file)) {
     cb(null, true);
     return;
   }
