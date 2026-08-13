@@ -1,6 +1,8 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+
 import AdminLayout from './admin/layouts/AdminLayout.jsx';
 import RequireAdminRole from './admin/components/RequireAdminRole.jsx';
+
 import AdminDashboardPage from './admin/pages/AdminDashboardPage.jsx';
 import AdminLoginPage from './admin/pages/AdminLoginPage.jsx';
 import AdminScheduleLecturePage from './admin/pages/AdminScheduleLecturePage.jsx';
@@ -16,8 +18,31 @@ import AdminBranchesPage from './admin/pages/AdminBranchesPage.jsx';
 import AdminBranchIntakesPage from './admin/pages/AdminBranchIntakesPage.jsx';
 import AdminBranchBatchesPage from './admin/pages/AdminBranchBatchesPage.jsx';
 import AdminRecordingsPage from './admin/pages/AdminRecordingsPage.jsx';
+import AdminFeedbackDashboardPage from './admin/pages/AdminFeedbackDashboardPage.jsx';
+import AdminFeedbackModerationLogPage from './admin/pages/AdminFeedbackModerationLogPage.jsx';
+
+/* =========================================================
+   ADMIN RESULTS
+========================================================= */
+
+import AdminResultsPage from './pages/admin/ResultsPage.jsx';
+
+/* =========================================================
+   STUDENT LAYOUT
+========================================================= */
+
 import StudentLayout from './layouts/StudentLayout.jsx';
+
+/* =========================================================
+   LECTURER LAYOUT
+========================================================= */
+
 import LecturerLayout from './layouts/LecturerLayout.jsx';
+
+/* =========================================================
+   STUDENT PAGES
+========================================================= */
+
 import CoursesPage from './pages/CoursesPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import HelpDeskPage from './pages/HelpDeskPage.jsx';
@@ -27,30 +52,66 @@ import PolicyPage from './pages/PolicyPage.jsx';
 import ProfilePage from './pages/ProfilePage.jsx';
 import RecordingsPage from './pages/RecordingsPage.jsx';
 import SchedulePage from './pages/SchedulePage.jsx';
+
 import LoginPage from './pages/LoginPage.jsx';
 import RegisterPage from './pages/RegisterPage.jsx';
 import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
 import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
+
+import LecturerProfilePage from './pages/LecturerProfilePage.jsx';
+import MyFeedbackHistoryPage from './pages/MyFeedbackHistoryPage.jsx';
+
+/* =========================================================
+   NEW: STUDENT RESULTS PAGE
+========================================================= */
+
+import StudentResultsPage from './pages/StudentResultsPage.jsx';
+
+/* =========================================================
+   LECTURER PAGES
+========================================================= */
+
 import LecturerDashboardPage from './pages/lecturer/LecturerDashboardPage.jsx';
 import LecturerChangePasswordPage from './pages/lecturer/LecturerChangePasswordPage.jsx';
 import LecturerSchedulePage from './pages/lecturer/LecturerSchedulePage.jsx';
 import LecturerRecordingsPage from './pages/lecturer/LecturerRecordingsPage.jsx';
 import LecturerKnowledgeHubPage from './pages/lecturer/LecturerKnowledgeHubPage.jsx';
 import LecturerFeedbackReportsPage from './pages/lecturer/LecturerFeedbackReportsPage.jsx';
-import LecturerProfilePage from './pages/LecturerProfilePage.jsx';
-import MyFeedbackHistoryPage from './pages/MyFeedbackHistoryPage.jsx';
-import AdminFeedbackDashboardPage from './admin/pages/AdminFeedbackDashboardPage.jsx';
-import AdminFeedbackModerationLogPage from './admin/pages/AdminFeedbackModerationLogPage.jsx';
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Admin */}
-        <Route path="/admin/login" element={<AdminLoginPage />} />
-        <Route path="/admin" element={<AdminLayout />}>
-          <Route index element={<AdminDashboardPage />} />
-          <Route path="course-overview" element={<Navigate to="/admin/branches" replace />} />
+        {/* =================================================
+            ADMIN
+        ================================================= */}
+
+        <Route
+          path="/admin/login"
+          element={<AdminLoginPage />}
+        />
+
+        <Route
+          path="/admin"
+          element={<AdminLayout />}
+        >
+          <Route
+            index
+            element={<AdminDashboardPage />}
+          />
+
+          <Route
+            path="course-overview"
+            element={
+              <Navigate
+                to="/admin/branches"
+                replace
+              />
+            }
+          />
+
+          {/* ================= USERS ================= */}
+
           <Route
             path="users"
             element={
@@ -59,7 +120,23 @@ export default function App() {
               </RequireAdminRole>
             }
           />
-          <Route path="students" element={<AdminStudentsPage />} />
+
+          {/* ================= STUDENTS ================= */}
+
+          <Route
+            path="students"
+            element={<AdminStudentsPage />}
+          />
+
+          {/* ================= ADMIN RESULTS ================= */}
+
+          <Route
+            path="results"
+            element={<AdminResultsPage />}
+          />
+
+          {/* ================= BRANCHES ================= */}
+
           <Route
             path="branches"
             element={
@@ -68,6 +145,7 @@ export default function App() {
               </RequireAdminRole>
             }
           />
+
           <Route
             path="branches/:branchId/intakes"
             element={
@@ -76,6 +154,7 @@ export default function App() {
               </RequireAdminRole>
             }
           />
+
           <Route
             path="branches/:branchId/intakes/:intakeId/batches"
             element={
@@ -84,10 +163,19 @@ export default function App() {
               </RequireAdminRole>
             }
           />
+
+          {/* ================= LEGACY FACULTY ROUTES ================= */}
+
           <Route
             path="faculties"
-            element={<Navigate to="/admin/branches" replace />}
+            element={
+              <Navigate
+                to="/admin/branches"
+                replace
+              />
+            }
           />
+
           <Route
             path="faculties/:facultyId/programs"
             element={
@@ -96,6 +184,7 @@ export default function App() {
               </RequireAdminRole>
             }
           />
+
           <Route
             path="programs/:programId/intakes"
             element={
@@ -104,6 +193,7 @@ export default function App() {
               </RequireAdminRole>
             }
           />
+
           <Route
             path="programs/:programId/intakes/:intakeId/students"
             element={
@@ -112,11 +202,42 @@ export default function App() {
               </RequireAdminRole>
             }
           />
-          {/* Content manager removed; keep a redirect for any old bookmarks */}
-          <Route path="content" element={<Navigate to="/admin" replace />} />
-          <Route path="schedule" element={<AdminScheduleLecturePage />} />
-          <Route path="materials/upload" element={<AdminMaterialUploadPage />} />
-          <Route path="assignments" element={<AdminAssignmentsPage />} />
+
+          {/* ================= OLD CONTENT ROUTE ================= */}
+
+          <Route
+            path="content"
+            element={
+              <Navigate
+                to="/admin"
+                replace
+              />
+            }
+          />
+
+          {/* ================= SCHEDULE ================= */}
+
+          <Route
+            path="schedule"
+            element={<AdminScheduleLecturePage />}
+          />
+
+          {/* ================= MATERIALS ================= */}
+
+          <Route
+            path="materials/upload"
+            element={<AdminMaterialUploadPage />}
+          />
+
+          {/* ================= ASSIGNMENTS ================= */}
+
+          <Route
+            path="assignments"
+            element={<AdminAssignmentsPage />}
+          />
+
+          {/* ================= KNOWLEDGE HUB ================= */}
+
           <Route
             path="knowledge-hub"
             element={
@@ -125,6 +246,9 @@ export default function App() {
               </RequireAdminRole>
             }
           />
+
+          {/* ================= RECORDINGS ================= */}
+
           <Route
             path="recordings"
             element={
@@ -133,6 +257,9 @@ export default function App() {
               </RequireAdminRole>
             }
           />
+
+          {/* ================= FEEDBACK ================= */}
+
           <Route
             path="feedback"
             element={
@@ -141,6 +268,7 @@ export default function App() {
               </RequireAdminRole>
             }
           />
+
           <Route
             path="feedback/moderation"
             element={
@@ -151,38 +279,175 @@ export default function App() {
           />
         </Route>
 
-        {/* Student */}
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        {/* =================================================
+            STUDENT AUTH
+        ================================================= */}
 
-        {/* Lecturer */}
-        <Route path="/lecturer/change-password" element={<LecturerChangePasswordPage />} />
-        <Route path="/lecturer" element={<LecturerLayout />}>
-          <Route index element={<Navigate to="/lecturer/dashboard" replace />} />
-          <Route path="dashboard" element={<LecturerDashboardPage />} />
-          <Route path="schedule" element={<LecturerSchedulePage />} />
-          <Route path="recordings" element={<LecturerRecordingsPage />} />
-          <Route path="knowledge-hub" element={<LecturerKnowledgeHubPage />} />
-          <Route path="feedback-reports" element={<LecturerFeedbackReportsPage />} />
-          <Route path="*" element={<Navigate to="/lecturer/dashboard" replace />} />
+        <Route
+          path="/login"
+          element={<LoginPage />}
+        />
+
+        <Route
+          path="/register"
+          element={<RegisterPage />}
+        />
+
+        <Route
+          path="/forgot-password"
+          element={<ForgotPasswordPage />}
+        />
+
+        <Route
+          path="/reset-password"
+          element={<ResetPasswordPage />}
+        />
+
+        {/* =================================================
+            LECTURER
+        ================================================= */}
+
+        <Route
+          path="/lecturer/change-password"
+          element={<LecturerChangePasswordPage />}
+        />
+
+        <Route
+          path="/lecturer"
+          element={<LecturerLayout />}
+        >
+          <Route
+            index
+            element={
+              <Navigate
+                to="/lecturer/dashboard"
+                replace
+              />
+            }
+          />
+
+          <Route
+            path="dashboard"
+            element={<LecturerDashboardPage />}
+          />
+
+          <Route
+            path="schedule"
+            element={<LecturerSchedulePage />}
+          />
+
+          <Route
+            path="recordings"
+            element={<LecturerRecordingsPage />}
+          />
+
+          <Route
+            path="knowledge-hub"
+            element={<LecturerKnowledgeHubPage />}
+          />
+
+          <Route
+            path="feedback-reports"
+            element={<LecturerFeedbackReportsPage />}
+          />
+
+          <Route
+            path="*"
+            element={
+              <Navigate
+                to="/lecturer/dashboard"
+                replace
+              />
+            }
+          />
         </Route>
 
+        {/* =================================================
+            STUDENT PORTAL
+        ================================================= */}
+
         <Route element={<StudentLayout />}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<DashboardPage />} />
-          <Route path="courses" element={<CoursesPage />} />
-          <Route path="materials" element={<MaterialsPage />} />
-          <Route path="knowledge-hub" element={<KnowledgeHubPage />} />
-          <Route path="schedule" element={<SchedulePage />} />
-          <Route path="recordings" element={<RecordingsPage />} />
-          <Route path="policy" element={<PolicyPage />} />
-          <Route path="profile" element={<ProfilePage />} />
-          <Route path="help" element={<HelpDeskPage />} />
-          <Route path="feedback" element={<MyFeedbackHistoryPage />} />
-          <Route path="lecturers/:lecturerId" element={<LecturerProfilePage />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route
+            index
+            element={
+              <Navigate
+                to="/dashboard"
+                replace
+              />
+            }
+          />
+
+          <Route
+            path="dashboard"
+            element={<DashboardPage />}
+          />
+
+          <Route
+            path="courses"
+            element={<CoursesPage />}
+          />
+
+          <Route
+            path="materials"
+            element={<MaterialsPage />}
+          />
+
+          <Route
+            path="knowledge-hub"
+            element={<KnowledgeHubPage />}
+          />
+
+          <Route
+            path="schedule"
+            element={<SchedulePage />}
+          />
+
+          <Route
+            path="recordings"
+            element={<RecordingsPage />}
+          />
+
+          {/* ================= STUDENT RESULTS ================= */}
+
+          <Route
+            path="results"
+            element={<StudentResultsPage />}
+          />
+
+          <Route
+            path="policy"
+            element={<PolicyPage />}
+          />
+
+          <Route
+            path="profile"
+            element={<ProfilePage />}
+          />
+
+          <Route
+            path="help"
+            element={<HelpDeskPage />}
+          />
+
+          <Route
+            path="feedback"
+            element={<MyFeedbackHistoryPage />}
+          />
+
+          <Route
+            path="lecturers/:lecturerId"
+            element={<LecturerProfilePage />}
+          />
+
+          <Route
+            path="*"
+            element={
+              <Navigate
+                to="/dashboard"
+                replace
+              />
+            }
+          />
         </Route>
       </Routes>
     </BrowserRouter>

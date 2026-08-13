@@ -22,16 +22,54 @@ function normalizeEmail(email) {
 
 function canonicalCourse(value) {
   const v = String(value || '').trim().toLowerCase();
+
   if (!v) return '';
-  if (v === 'cabin crew' || v === 'cabin' || v === 'crew') return 'Cabin Crew';
-  if (v === 'ground operations' || v === 'ground ops' || v === 'ground operation' || v === 'ground') {
+
+  if (
+    v === 'cabin crew' ||
+    v === 'cabin' ||
+    v === 'crew'
+  ) {
+    return 'Cabin Crew';
+  }
+
+  if (
+    v === 'ground operations' ||
+    v === 'ground ops' ||
+    v === 'ground operation' ||
+    v === 'ground'
+  ) {
     return 'Ground Operations';
   }
-  if (v === 'ticketing & reservations' || v === 'ticketing and reservations' || v === 'ticketing' || v === 'reservations') {
+
+  if (
+    v === 'ticketing & reservations' ||
+    v === 'ticketing and reservations' ||
+    v === 'ticketing' ||
+    v === 'reservations'
+  ) {
     return 'Ticketing & Reservations';
   }
-  if (v === 'air cargo' || v === 'cargo') return 'Air Cargo';
+
+  if (
+    v === 'air cargo' ||
+    v === 'cargo'
+  ) {
+    return 'Air Cargo';
+  }
+
   return String(value || '').trim();
+}
+
+function isAllowedCourse(value) {
+  const course = canonicalCourse(value);
+
+  return [
+    'Cabin Crew',
+    'Ground Operations',
+    'Ticketing & Reservations',
+    'Air Cargo',
+  ].includes(course);
 }
 
 function isValidEmail(email) {
@@ -39,38 +77,117 @@ function isValidEmail(email) {
 }
 
 function isSafeKey(key) {
-  return typeof key === 'string' && /^[a-z0-9][a-z0-9._-]{0,63}$/i.test(key);
+  return (
+    typeof key === 'string' &&
+    /^[a-z0-9][a-z0-9._-]{0,63}$/i.test(key)
+  );
 }
 
-async function resolveStudentEnrollment(branchId, intakeId, batchId) {
+async function resolveStudentEnrollment(
+  branchId,
+  intakeId,
+  batchId
+) {
   const safeBranchId = safeTrim(branchId);
   const safeIntakeId = safeTrim(intakeId);
   const safeBatchId = safeTrim(batchId);
 
   if (!safeBranchId && !safeIntakeId && !safeBatchId) {
-    return { branchId: '', intakeId: '', batchId: '' };
+    return {
+      branchId: '',
+      intakeId: '',
+      batchId: '',
+    };
   }
 
-  // Only require branch and intake; batchId is optional
+  // Current LMS hierarchy:
+  // Branch -> Intake -> Batch
+  //
+  // Branch + Intake are required when enrollment is supplied.
+  // Batch can remain optional.
   if (!safeBranchId || !safeIntakeId) {
-    return { error: 'Branch and intake (batch) are required for student enrollment' };
+    return {
+      error:
+        'Branch and intake are required for student enrollment',
+    };
   }
 
-  const payload = await getOrCreateAppDataPayload('academics', { branches: DEFAULT_LMS_DATA?.academics?.branches || [] });
-  const branches = Array.isArray(payload?.branches) ? payload.branches : [];
+  const payload = await getOrCreateAppDataPayload(
+    'academics',
+    {
+      branches:
+        DEFAULT_LMS_DATA?.academics?.branches || [],
+    }
+  );
+
+  const branches = Array.isArray(payload?.branches)
+    ? payload.branches
+    : [];
 
   const branch = branches.find(
-    (item) => normalizeId(item?.id || item?._id || item?.key || item?.code || item?.name) === normalizeId(safeBranchId)
+    (item) =>
+      normalizeId(
+        item?.id ||
+          item?._id ||
+          item?.key ||
+          item?.code ||
+          item?.name
+      ) === normalizeId(safeBranchId)
   );
-  if (!branch) return { error: 'Invalid branch selection' };
 
-  const intakes = Array.isArray(branch?.intakes) ? branch.intakes : [];
+  if (!branch) {
+    return {
+      error: 'Invalid branch selection',
+    };
+  }
+
+  const intakes = Array.isArray(branch?.intakes)
+    ? branch.intakes
+    : [];
+
   const intake = intakes.find(
-    (item) => normalizeId(item?.id || item?._id || item?.key || item?.code || item?.name) === normalizeId(safeIntakeId)
+    (item) =>
+      normalizeId(
+        item?.id ||
+          item?._id ||
+          item?.key ||
+          item?.code ||
+          item?.name
+      ) === normalizeId(safeIntakeId)
   );
-  if (!intake) return { error: 'Invalid intake selection' };
 
-  // Batch is optional - return with empty batchId if not provided
+  if (!intake) {
+    return {
+      error: 'Invalid intake selection',
+    };
+  }
+
+  // If a batch is supplied, validate it when possible.
+  if (safeBatchId) {
+    const batches = Array.isArray(intake?.batches)
+      ? intake.batches
+      : [];
+
+    if (batches.length > 0) {
+      const batch = batches.find(
+        (item) =>
+          normalizeId(
+            item?.id ||
+              item?._id ||
+              item?.key ||
+              item?.code ||
+              item?.name
+          ) === normalizeId(safeBatchId)
+      );
+
+      if (!batch) {
+        return {
+          error: 'Invalid batch selection',
+        };
+      }
+    }
+  }
+
   return {
     branchId: safeBranchId,
     intakeId: safeIntakeId,
@@ -81,69 +198,146 @@ async function resolveStudentEnrollment(branchId, intakeId, batchId) {
 function toStudentListItem(student) {
   return {
     id: String(student._id),
-    fullName: student.fullName,
-    email: student.email,
-    studentId: student.studentId,
-    course: student.course,
-    phoneNumber: student.phoneNumber,
-    whatsappNumber: student.whatsappNumber,
-    intakeId: student.intakeId,
+
+    fullName: student.fullName || '',
+
+    email: student.email || '',
+
+    studentId: student.studentId || '',
+
+    course: student.course || '',
+
+    phoneNumber: student.phoneNumber || '',
+
+    whatsappNumber: student.whatsappNumber || '',
+
+    branchId: student.branchId || '',
+
+    intakeId: student.intakeId || '',
+
+    batchId: student.batchId || '',
+
+    createdBy: student.createdBy || '',
+
     createdAt: student.createdAt,
   };
 }
 
 function toAdminListItem(admin) {
-  const role = admin?.role ? String(admin.role) : 'staff';
+  const role = admin?.role
+    ? String(admin.role)
+    : 'staff';
+
   return {
     id: String(admin._id),
+
     name: admin.name,
+
     email: admin.email,
+
     role,
+
     createdAt: admin.createdAt,
   };
 }
 
-export async function getAdminMetrics(req, res, next) {
+/* =========================================================
+   ADMIN DASHBOARD METRICS
+========================================================= */
+
+export async function getAdminMetrics(
+  req,
+  res,
+  next
+) {
   try {
-    const [students, admins, materials, recentMaterials, academicsPayload, groupedStudentsByBranch] = await Promise.all([
+    const [
+      students,
+      admins,
+      materials,
+      recentMaterials,
+      academicsPayload,
+      groupedStudentsByBranch,
+    ] = await Promise.all([
       Student.countDocuments(),
+
       Admin.countDocuments(),
-      Material.countDocuments({ isActive: true }),
-      Material.find({ isActive: true })
-        .sort({ createdAt: -1 })
-        .limit(5)
-        .select('title course weekNumber branchId batchId uploadedByName createdAt')
-        .lean(),
-      getOrCreateAppDataPayload('academics', {
-        branches: DEFAULT_LMS_DATA?.academics?.branches || [],
+
+      Material.countDocuments({
+        isActive: true,
       }),
+
+      Material.find({
+        isActive: true,
+      })
+        .sort({
+          createdAt: -1,
+        })
+        .limit(5)
+        .select(
+          'title course weekNumber branchId batchId uploadedByName createdAt'
+        )
+        .lean(),
+
+      getOrCreateAppDataPayload(
+        'academics',
+        {
+          branches:
+            DEFAULT_LMS_DATA?.academics?.branches ||
+            [],
+        }
+      ),
+
       Student.aggregate([
         {
           $match: {
-            branchId: { $exists: true, $ne: '' },
+            branchId: {
+              $exists: true,
+              $ne: '',
+            },
           },
         },
         {
           $group: {
             _id: '$branchId',
-            count: { $sum: 1 },
+            count: {
+              $sum: 1,
+            },
           },
         },
       ]),
     ]);
 
     const branchCountMap = new Map(
-      groupedStudentsByBranch.map((item) => [normalizeId(item?._id), Number(item?.count || 0)])
+      groupedStudentsByBranch.map((item) => [
+        normalizeId(item?._id),
+        Number(item?.count || 0),
+      ])
     );
 
-    const knownBranches = Array.isArray(academicsPayload?.branches) ? academicsPayload.branches : [];
+    const knownBranches = Array.isArray(
+      academicsPayload?.branches
+    )
+      ? academicsPayload.branches
+      : [];
+
     const branchStudentCounts = [];
+
     const usedBranchIds = new Set();
 
     knownBranches.forEach((branch) => {
-      const branchId = normalizeId(branch?.id || branch?._id || branch?.key || branch?.code || branch?.name);
+      const branchId = normalizeId(
+        branch?.id ||
+          branch?._id ||
+          branch?.key ||
+          branch?.code ||
+          branch?.name
+      );
 
-      if (!branchId || usedBranchIds.has(branchId)) {
+      if (
+        !branchId ||
+        usedBranchIds.has(branchId)
+      ) {
         return;
       }
 
@@ -151,51 +345,94 @@ export async function getAdminMetrics(req, res, next) {
 
       branchStudentCounts.push({
         branchId,
-        branchName: safeTrim(branch?.name) || branchId,
-        studentCount: branchCountMap.get(branchId) || 0,
+
+        branchName:
+          safeTrim(branch?.name) || branchId,
+
+        studentCount:
+          branchCountMap.get(branchId) || 0,
       });
     });
 
-    // Include students linked to branch IDs that are no longer in the hierarchy payload.
-    branchCountMap.forEach((studentCount, branchId) => {
-      if (usedBranchIds.has(branchId)) {
-        return;
+    // Include branch IDs that still exist in
+    // students but no longer exist in academics.
+    branchCountMap.forEach(
+      (studentCount, branchId) => {
+        if (usedBranchIds.has(branchId)) {
+          return;
+        }
+
+        branchStudentCounts.push({
+          branchId,
+
+          branchName: branchId,
+
+          studentCount,
+        });
       }
+    );
 
-      branchStudentCounts.push({
-        branchId,
-        branchName: branchId,
-        studentCount,
-      });
-    });
+    branchStudentCounts.sort((a, b) =>
+      String(a.branchName).localeCompare(
+        String(b.branchName)
+      )
+    );
 
-    branchStudentCounts.sort((a, b) => String(a.branchName).localeCompare(String(b.branchName)));
+    const programmesDoc = await AppData.findOne({
+      key: 'programmes',
+    }).lean();
 
-    const programmesDoc = await AppData.findOne({ key: 'programmes' }).lean();
-    const programmes = Array.isArray(programmesDoc?.payload?.programmes)
+    const programmes = Array.isArray(
+      programmesDoc?.payload?.programmes
+    )
       ? programmesDoc.payload.programmes.length
       : 0;
 
     res.json({
       students,
+
       users: admins,
+
       materials,
+
       branchStudentCounts,
-      recentMaterials: recentMaterials.map((item) => ({
-        id: String(item._id),
-        title: item.title,
-        course: item.course || '',
-        weekNumber: item.weekNumber || null,
-        branchId: item.branchId,
-        batchId: item.batchId,
-        uploadedByName: item.uploadedByName || 'Admin',
-        uploadedAt: item.createdAt,
-      })),
+
+      recentMaterials: recentMaterials.map(
+        (item) => ({
+          id: String(item._id),
+
+          title: item.title,
+
+          course: item.course || '',
+
+          weekNumber:
+            item.weekNumber || null,
+
+          branchId:
+            item.branchId || '',
+
+          batchId:
+            item.batchId || '',
+
+          uploadedByName:
+            item.uploadedByName ||
+            'Admin',
+
+          uploadedAt:
+            item.createdAt,
+        })
+      ),
+
       faculties: 0,
+
       programmes,
+
       totalIncome: 0,
+
       awaitingPayments: 0,
+
       pendingApproval: 0,
+
       rejectedPayments: 0,
     });
   } catch (err) {
@@ -203,97 +440,288 @@ export async function getAdminMetrics(req, res, next) {
   }
 }
 
-export async function listAdminUsers(req, res, next) {
+/* =========================================================
+   ADMIN USERS
+========================================================= */
+
+export async function listAdminUsers(
+  req,
+  res,
+  next
+) {
   try {
     const items = await Admin.find({})
-      .sort({ createdAt: -1 })
+      .sort({
+        createdAt: -1,
+      })
       .lean();
 
-    res.json({ users: items.map(toAdminListItem) });
+    res.json({
+      users: items.map(toAdminListItem),
+    });
   } catch (err) {
     next(err);
   }
 }
 
-export async function createStaffUser(req, res, next) {
+export async function createStaffUser(
+  req,
+  res,
+  next
+) {
   try {
-    const { name, email, password, role, branchId, intakeId, batchId, mustChangePassword } = req.body || {};
-    const normalizedEmail = normalizeEmail(email);
+    const {
+      name,
+      email,
+      password,
+      role,
+      branchId,
+      intakeId,
+      batchId,
+      mustChangePassword,
+    } = req.body || {};
 
-    const requestedRole = String(role || 'staff').trim().toLowerCase();
-    const allowedRoles = new Set(['staff', 'lecturer']);
+    const normalizedEmail =
+      normalizeEmail(email);
+
+    const requestedRole = String(
+      role || 'staff'
+    )
+      .trim()
+      .toLowerCase();
+
+    const allowedRoles = new Set([
+      'staff',
+      'lecturer',
+    ]);
+
     if (!allowedRoles.has(requestedRole)) {
-      return res.status(400).json({ message: 'Invalid role' });
+      return res.status(400).json({
+        message: 'Invalid role',
+      });
     }
 
-    if (!safeTrim(name)) return res.status(400).json({ message: 'Name is required' });
-    if (!isValidEmail(normalizedEmail)) return res.status(400).json({ message: 'Valid email is required' });
-    if (typeof password !== 'string' || password.trim().length < 8) {
-      return res.status(400).json({ message: 'Password must be at least 8 characters' });
+    if (!safeTrim(name)) {
+      return res.status(400).json({
+        message: 'Name is required',
+      });
     }
 
-    const existing = await Admin.findOne({ email: normalizedEmail }).lean();
-    if (existing) return res.status(409).json({ message: 'Email already exists' });
+    if (!isValidEmail(normalizedEmail)) {
+      return res.status(400).json({
+        message: 'Valid email is required',
+      });
+    }
 
-    const passwordHash = await bcrypt.hash(password.trim(), 12);
+    if (
+      typeof password !== 'string' ||
+      password.trim().length < 8
+    ) {
+      return res.status(400).json({
+        message:
+          'Password must be at least 8 characters',
+      });
+    }
+
+    const existing = await Admin.findOne({
+      email: normalizedEmail,
+    }).lean();
+
+    if (existing) {
+      return res.status(409).json({
+        message: 'Email already exists',
+      });
+    }
+
+    const passwordHash =
+      await bcrypt.hash(
+        password.trim(),
+        12
+      );
+
     const created = await Admin.create({
       name: safeTrim(name),
+
       email: normalizedEmail,
+
       passwordHash,
+
       role: requestedRole,
-      branchId: typeof branchId === 'string' ? branchId.trim() : '',
-      intakeId: typeof intakeId === 'string' ? intakeId.trim() : '',
-      batchId:  typeof batchId  === 'string' ? batchId.trim()  : '',
-      mustChangePassword: mustChangePassword === true,
+
+      branchId:
+        typeof branchId === 'string'
+          ? branchId.trim()
+          : '',
+
+      intakeId:
+        typeof intakeId === 'string'
+          ? intakeId.trim()
+          : '',
+
+      batchId:
+        typeof batchId === 'string'
+          ? batchId.trim()
+          : '',
+
+      mustChangePassword:
+        mustChangePassword === true,
     });
 
-    // Log the action
-    await logAdminAction(req.adminAuth?.id, 'CREATE_STAFF_ADMIN', {
-      staffAdminId: created._id,
-      staffAdminEmail: normalizedEmail,
-      staffAdminName: safeTrim(name),
-      role: requestedRole,
-    });
+    await logAdminAction(
+      req.adminAuth?.id,
+      'CREATE_STAFF_ADMIN',
+      {
+        staffAdminId:
+          created._id,
 
-    res.status(201).json({ user: toAdminListItem(created) });
+        staffAdminEmail:
+          normalizedEmail,
+
+        staffAdminName:
+          safeTrim(name),
+
+        role:
+          requestedRole,
+      }
+    );
+
+    res.status(201).json({
+      user: toAdminListItem(created),
+    });
   } catch (err) {
     if (err?.code === 11000) {
-      return res.status(409).json({ message: 'Email already exists' });
+      return res.status(409).json({
+        message: 'Email already exists',
+      });
     }
+
     next(err);
   }
 }
 
-export async function listStudents(req, res, next) {
+/* =========================================================
+   STUDENTS
+========================================================= */
+
+export async function listStudents(
+  req,
+  res,
+  next
+) {
   try {
-    const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));
+    const limit = Math.min(
+      200,
+      Math.max(
+        1,
+        Number(req.query.limit || 50)
+      )
+    );
+
     const q = safeTrim(req.query.q);
-    const source = safeTrim(req.query.source); // 'self' or 'admin'
-    const exportType = String(req.query.export || '').toLowerCase(); // 'csv'
-    const intakeId = safeTrim(req.query.intakeId);
+
+    const source = safeTrim(
+      req.query.source
+    );
+
+    const exportType = String(
+      req.query.export || ''
+    ).toLowerCase();
+
+    const branchId = safeTrim(
+      req.query.branchId
+    );
+
+    const intakeId = safeTrim(
+      req.query.intakeId
+    );
+
+    const batchId = safeTrim(
+      req.query.batchId
+    );
+
+    const rawCourse = safeTrim(
+      req.query.course
+    );
+
+    const course = rawCourse
+      ? canonicalCourse(rawCourse)
+      : '';
 
     const filter = {
       ...(q
         ? {
             $or: [
-              { fullName: { $regex: q, $options: 'i' } },
-              { email: { $regex: q, $options: 'i' } },
-              { studentId: { $regex: q, $options: 'i' } },
+              {
+                fullName: {
+                  $regex: q,
+                  $options: 'i',
+                },
+              },
+
+              {
+                email: {
+                  $regex: q,
+                  $options: 'i',
+                },
+              },
+
+              {
+                studentId: {
+                  $regex: q,
+                  $options: 'i',
+                },
+              },
             ],
           }
         : {}),
-      ...(intakeId ? { intakeId } : {}),
-      ...(source ? { createdBy: source } : {}),
+
+      ...(branchId
+        ? {
+            branchId,
+          }
+        : {}),
+
+      ...(intakeId
+        ? {
+            intakeId,
+          }
+        : {}),
+
+      ...(batchId
+        ? {
+            batchId,
+          }
+        : {}),
+
+      ...(course
+        ? {
+            course,
+          }
+        : {}),
+
+      ...(source
+        ? {
+            createdBy: source,
+          }
+        : {}),
     };
 
-    const items = await Student.find(filter)
-      .sort({ studentId: 1, createdAt: 1 })
-      .collation({ locale: 'en', numericOrdering: true, strength: 2 })
+    const items = await Student.find(
+      filter
+    )
+      .sort({
+        studentId: 1,
+        createdAt: 1,
+      })
+      .collation({
+        locale: 'en',
+        numericOrdering: true,
+        strength: 2,
+      })
       .limit(limit)
       .lean();
 
     if (exportType === 'csv') {
-      // build CSV
       const cols = [
         'id',
         'fullName',
@@ -309,70 +737,345 @@ export async function listStudents(req, res, next) {
         'createdBy',
       ];
 
-      const header = cols.join(',') + '\n';
-      const rows = items.map((s) =>
-        cols
-          .map((c) => {
-            const v = s[c] === undefined || s[c] === null ? '' : String(s[c]);
-            // Escape double quotes
-            if (v.includes(',') || v.includes('"') || v.includes('\n')) {
-              return '"' + v.replace(/"/g, '""') + '"';
-            }
-            return v;
-          })
-          .join(',')
+      const header =
+        cols.join(',') + '\n';
+
+      const rows = items.map(
+        (student) => {
+          const studentData = {
+            ...student,
+            id: String(
+              student._id
+            ),
+          };
+
+          return cols
+            .map((column) => {
+              const rawValue =
+                studentData[column];
+
+              const value =
+                rawValue === undefined ||
+                rawValue === null
+                  ? ''
+                  : String(rawValue);
+
+              if (
+                value.includes(',') ||
+                value.includes('"') ||
+                value.includes('\n')
+              ) {
+                return (
+                  '"' +
+                  value.replace(
+                    /"/g,
+                    '""'
+                  ) +
+                  '"'
+                );
+              }
+
+              return value;
+            })
+            .join(',');
+        }
       );
 
-      const csv = header + rows.join('\n');
-      const filename = `students-${new Date().toISOString().slice(0,10)}.csv`;
-      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      const csv =
+        header + rows.join('\n');
+
+      const filename = `students-${new Date()
+        .toISOString()
+        .slice(0, 10)}.csv`;
+
+      res.setHeader(
+        'Content-Type',
+        'text/csv; charset=utf-8'
+      );
+
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${filename}"`
+      );
+
       return res.send(csv);
     }
 
-    res.json({ students: items.map(toStudentListItem) });
+    res.json({
+      students:
+        items.map(
+          toStudentListItem
+        ),
+    });
   } catch (err) {
     next(err);
   }
 }
 
-export async function getStudentById(req, res, next) {
+/*
+=========================================================
+RESULTS STUDENT FILTER
+
+Admin Result page will call:
+
+GET /api/admin/students/results?
+branchId=...
+&batchId=...
+&course=...
+
+This endpoint intentionally returns only the
+information needed for entering results.
+=========================================================
+*/
+
+export async function listStudentsForResults(
+  req,
+  res,
+  next
+) {
   try {
-    const id = String(req.params?.id || '').trim();
-    if (!id) return res.status(400).json({ message: 'Student id is required' });
+    const branchId = safeTrim(
+      req.query.branchId
+    );
 
-    const student = await Student.findById(id).lean();
-    if (!student) return res.status(404).json({ message: 'Student not found' });
+    const batchId = safeTrim(
+      req.query.batchId
+    );
 
-    const payload = {
-      id: String(student._id),
-      fullName: student.fullName,
-      email: student.email,
-      studentId: student.studentId,
-      nic: student.nic,
-      course: student.course,
-      whatsappNumber: student.whatsappNumber,
-      phoneNumber: student.phoneNumber,
-      address: student.address,
-      guardianName: student.guardianName,
-      guardianPhoneNumber: student.guardianPhoneNumber,
-      branchId: student.branchId,
-      intakeId: student.intakeId,
-      batchId: student.batchId,
-      facultyId: student.facultyId,
-      programId: student.programId,
-      createdBy: student.createdBy,
-      createdAt: student.createdAt,
-      updatedAt: student.updatedAt,
+    const intakeId = safeTrim(
+      req.query.intakeId
+    );
+
+    const rawCourse = safeTrim(
+      req.query.course
+    );
+
+    if (!branchId) {
+      return res.status(400).json({
+        message:
+          'Branch is required',
+      });
+    }
+
+    if (!batchId) {
+      return res.status(400).json({
+        message:
+          'Batch is required',
+      });
+    }
+
+    if (!rawCourse) {
+      return res.status(400).json({
+        message:
+          'Diploma / course is required',
+      });
+    }
+
+    const course =
+      canonicalCourse(rawCourse);
+
+    if (!isAllowedCourse(course)) {
+      return res.status(400).json({
+        message:
+          'Invalid diploma / course',
+      });
+    }
+
+    const filter = {
+      branchId,
+      batchId,
+      course,
+
+      ...(intakeId
+        ? {
+            intakeId,
+          }
+        : {}),
     };
 
-    res.json({ student: payload });
+    const students =
+      await Student.find(filter)
+        .select(
+          '_id studentId fullName course branchId intakeId batchId'
+        )
+        .sort({
+          studentId: 1,
+          fullName: 1,
+        })
+        .collation({
+          locale: 'en',
+          numericOrdering: true,
+          strength: 2,
+        })
+        .lean();
+
+    return res.json({
+      branchId,
+
+      batchId,
+
+      intakeId,
+
+      course,
+
+      count:
+        students.length,
+
+      students:
+        students.map(
+          (student) => ({
+            id: String(
+              student._id
+            ),
+
+            studentId:
+              student.studentId,
+
+            fullName:
+              student.fullName,
+
+            course:
+              student.course,
+
+            branchId:
+              student.branchId ||
+              '',
+
+            intakeId:
+              student.intakeId ||
+              '',
+
+            batchId:
+              student.batchId ||
+              '',
+          })
+        ),
+    });
   } catch (err) {
     next(err);
   }
 }
 
-export async function createStudentByAdmin(req, res, next) {
+export async function getStudentById(
+  req,
+  res,
+  next
+) {
+  try {
+    const id = String(
+      req.params?.id || ''
+    ).trim();
+
+    if (!id) {
+      return res.status(400).json({
+        message:
+          'Student id is required',
+      });
+    }
+
+    const student =
+      await Student.findById(
+        id
+      ).lean();
+
+    if (!student) {
+      return res.status(404).json({
+        message:
+          'Student not found',
+      });
+    }
+
+    const payload = {
+      id: String(
+        student._id
+      ),
+
+      fullName:
+        student.fullName,
+
+      email:
+        student.email,
+
+      studentId:
+        student.studentId,
+
+      dob:
+        student.dob,
+
+      gender:
+        student.gender,
+
+      nic:
+        student.nic,
+
+      course:
+        student.course,
+
+      whatsappNumber:
+        student.whatsappNumber,
+
+      phoneNumber:
+        student.phoneNumber,
+
+      address:
+        student.address,
+
+      school:
+        student.school,
+
+      olResult:
+        student.olResult,
+
+      olMath:
+        student.olMath,
+
+      olEnglish:
+        student.olEnglish,
+
+      guardianName:
+        student.guardianName,
+
+      guardianPhoneNumber:
+        student.guardianPhoneNumber,
+
+      branchId:
+        student.branchId,
+
+      intakeId:
+        student.intakeId,
+
+      batchId:
+        student.batchId,
+
+      facultyId:
+        student.facultyId,
+
+      programId:
+        student.programId,
+
+      createdBy:
+        student.createdBy,
+
+      createdAt:
+        student.createdAt,
+
+      updatedAt:
+        student.updatedAt,
+    };
+
+    res.json({
+      student: payload,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function createStudentByAdmin(
+  req,
+  res,
+  next
+) {
   try {
     const {
       fullName,
@@ -385,6 +1088,10 @@ export async function createStudentByAdmin(req, res, next) {
       whatsappNumber,
       phoneNumber,
       address,
+      school,
+      olResult,
+      olMath,
+      olEnglish,
       guardianName,
       guardianPhoneNumber,
       password,
@@ -393,68 +1100,273 @@ export async function createStudentByAdmin(req, res, next) {
       batchId,
     } = req.body || {};
 
-    const normalizedEmail = normalizeEmail(email);
+    const normalizedEmail =
+      normalizeEmail(email);
 
-    if (!safeTrim(fullName)) return res.status(400).json({ message: 'Name is required' });
-    if (!safeTrim(studentId)) return res.status(400).json({ message: 'Student ID is required' });
-    if (!isValidEmail(normalizedEmail)) return res.status(400).json({ message: 'Valid email is required' });
-    if (!dob) return res.status(400).json({ message: 'Date of birth is required' });
-    if (!gender || !['male', 'female', 'other'].includes(String(gender).toLowerCase())) {
-      return res.status(400).json({ message: 'Valid gender is required' });
-    }
-    if (typeof password !== 'string' || password.trim().length < 8) {
-      return res.status(400).json({ message: 'Password must be at least 8 characters' });
+    if (!safeTrim(fullName)) {
+      return res.status(400).json({
+        message:
+          'Name is required',
+      });
     }
 
-    const enrollment = await resolveStudentEnrollment(branchId, intakeId, batchId);
+    if (!safeTrim(studentId)) {
+      return res.status(400).json({
+        message:
+          'Student ID is required',
+      });
+    }
+
+    if (
+      !isValidEmail(
+        normalizedEmail
+      )
+    ) {
+      return res.status(400).json({
+        message:
+          'Valid email is required',
+      });
+    }
+
+    if (!dob) {
+      return res.status(400).json({
+        message:
+          'Date of birth is required',
+      });
+    }
+
+    const normalizedGender = String(
+      gender || ''
+    ).toLowerCase();
+
+    if (
+      ![
+        'male',
+        'female',
+        'other',
+      ].includes(
+        normalizedGender
+      )
+    ) {
+      return res.status(400).json({
+        message:
+          'Valid gender is required',
+      });
+    }
+
+    if (
+      typeof password !== 'string' ||
+      password.trim().length < 8
+    ) {
+      return res.status(400).json({
+        message:
+          'Password must be at least 8 characters',
+      });
+    }
+
+    const normalizedCourse =
+      canonicalCourse(course);
+
+    if (
+      !isAllowedCourse(
+        normalizedCourse
+      )
+    ) {
+      return res.status(400).json({
+        message:
+          'Valid course is required',
+      });
+    }
+
+    const enrollment =
+      await resolveStudentEnrollment(
+        branchId,
+        intakeId,
+        batchId
+      );
+
     if (enrollment?.error) {
-      return res.status(400).json({ message: enrollment.error });
+      return res.status(400).json({
+        message:
+          enrollment.error,
+      });
     }
 
-    const existing = await Student.findOne({
-      $or: [{ email: normalizedEmail }, { studentId: safeTrim(studentId) }],
-    }).lean();
+    const existing =
+      await Student.findOne({
+        $or: [
+          {
+            email:
+              normalizedEmail,
+          },
 
-    if (existing) return res.status(409).json({ message: 'Email or Student ID already exists' });
+          {
+            studentId:
+              safeTrim(
+                studentId
+              ),
+          },
+        ],
+      }).lean();
 
-    const passwordHash = await bcrypt.hash(password.trim(), 12);
+    if (existing) {
+      return res.status(409).json({
+        message:
+          'Email or Student ID already exists',
+      });
+    }
 
-    const created = await Student.create({
-      fullName: safeTrim(fullName),
-      email: normalizedEmail,
-      studentId: safeTrim(studentId),
-      dob,
-      gender: String(gender).toLowerCase(),
-      nic: safeTrim(nic),
-      course: canonicalCourse(course),
-      whatsappNumber: safeTrim(whatsappNumber),
-      phoneNumber: safeTrim(phoneNumber),
-      address: safeTrim(address),
-      guardianName: safeTrim(guardianName),
-      guardianPhoneNumber: safeTrim(guardianPhoneNumber),
-      branchId: enrollment.branchId,
-      intakeId: enrollment.intakeId,
-      batchId: enrollment.batchId,
-      passwordHash,
-      createdBy: 'admin',
+    const passwordHash =
+      await bcrypt.hash(
+        password.trim(),
+        12
+      );
+
+    const created =
+      await Student.create({
+        fullName:
+          safeTrim(fullName),
+
+        email:
+          normalizedEmail,
+
+        studentId:
+          safeTrim(studentId),
+
+        dob,
+
+        gender:
+          normalizedGender,
+
+        nic:
+          safeTrim(nic),
+
+        course:
+          normalizedCourse,
+
+        whatsappNumber:
+          safeTrim(
+            whatsappNumber
+          ),
+
+        phoneNumber:
+          safeTrim(
+            phoneNumber
+          ),
+
+        address:
+          safeTrim(address),
+
+        school:
+          safeTrim(school),
+
+        olResult:
+          safeTrim(olResult),
+
+        olMath:
+          safeTrim(olMath),
+
+        olEnglish:
+          safeTrim(olEnglish),
+
+        guardianName:
+          safeTrim(
+            guardianName
+          ),
+
+        guardianPhoneNumber:
+          safeTrim(
+            guardianPhoneNumber
+          ),
+
+        branchId:
+          enrollment.branchId,
+
+        intakeId:
+          enrollment.intakeId,
+
+        batchId:
+          enrollment.batchId,
+
+        passwordHash,
+
+        createdBy:
+          'admin',
+      });
+
+    await logAdminAction(
+      req.adminAuth?.id,
+      'CREATE_STUDENT',
+      {
+        studentMongoId:
+          created._id,
+
+        studentId:
+          created.studentId,
+
+        studentEmail:
+          created.email,
+
+        course:
+          created.course,
+
+        branchId:
+          created.branchId,
+
+        intakeId:
+          created.intakeId,
+
+        batchId:
+          created.batchId,
+      }
+    );
+
+    res.status(201).json({
+      student:
+        toStudentListItem(
+          created
+        ),
     });
-
-    res.status(201).json({ student: toStudentListItem(created) });
   } catch (err) {
     if (err?.code === 11000) {
-      return res.status(409).json({ message: 'Email or Student ID already exists' });
+      return res.status(409).json({
+        message:
+          'Email or Student ID already exists',
+      });
     }
+
     next(err);
   }
 }
 
-export async function updateStudentByAdmin(req, res, next) {
+export async function updateStudentByAdmin(
+  req,
+  res,
+  next
+) {
   try {
-    const id = String(req.params?.id || '').trim();
-    if (!id) return res.status(400).json({ message: 'Student ID is required' });
+    const id = String(
+      req.params?.id || ''
+    ).trim();
 
-    const student = await Student.findById(id);
-    if (!student) return res.status(404).json({ message: 'Student not found' });
+    if (!id) {
+      return res.status(400).json({
+        message:
+          'Student ID is required',
+      });
+    }
+
+    const student =
+      await Student.findById(
+        id
+      );
+
+    if (!student) {
+      return res.status(404).json({
+        message:
+          'Student not found',
+      });
+    }
 
     const {
       fullName,
@@ -465,6 +1377,10 @@ export async function updateStudentByAdmin(req, res, next) {
       whatsappNumber,
       phoneNumber,
       address,
+      school,
+      olResult,
+      olMath,
+      olEnglish,
       guardianName,
       guardianPhoneNumber,
       branchId,
@@ -472,215 +1388,630 @@ export async function updateStudentByAdmin(req, res, next) {
       batchId,
     } = req.body || {};
 
-    const normalizedEmail = normalizeEmail(email);
-    if (!safeTrim(fullName)) return res.status(400).json({ message: 'Name is required' });
-    if (!safeTrim(studentId)) return res.status(400).json({ message: 'Student ID is required' });
-    if (!isValidEmail(normalizedEmail)) return res.status(400).json({ message: 'Valid email is required' });
+    const normalizedEmail =
+      normalizeEmail(email);
 
-    const enrollment = await resolveStudentEnrollment(branchId, intakeId, batchId);
-    if (enrollment?.error) {
-      return res.status(400).json({ message: enrollment.error });
+    if (!safeTrim(fullName)) {
+      return res.status(400).json({
+        message:
+          'Name is required',
+      });
     }
 
-    const existing = await Student.findOne({
-      _id: { $ne: student._id },
-      $or: [{ email: normalizedEmail }, { studentId: safeTrim(studentId) }],
-    }).lean();
+    if (!safeTrim(studentId)) {
+      return res.status(400).json({
+        message:
+          'Student ID is required',
+      });
+    }
 
-    if (existing) return res.status(409).json({ message: 'Email or Student ID already exists' });
+    if (
+      !isValidEmail(
+        normalizedEmail
+      )
+    ) {
+      return res.status(400).json({
+        message:
+          'Valid email is required',
+      });
+    }
 
-    student.fullName = safeTrim(fullName);
-    student.email = normalizedEmail;
-    student.studentId = safeTrim(studentId);
-    student.nic = safeTrim(nic);
-    student.course = canonicalCourse(course);
-    student.whatsappNumber = safeTrim(whatsappNumber);
-    student.phoneNumber = safeTrim(phoneNumber);
-    student.address = safeTrim(address);
-    student.guardianName = safeTrim(guardianName);
-    student.guardianPhoneNumber = safeTrim(guardianPhoneNumber);
-    student.branchId = enrollment.branchId;
-    student.intakeId = enrollment.intakeId;
-    student.batchId = enrollment.batchId;
+    const normalizedCourse =
+      canonicalCourse(course);
+
+    if (
+      !isAllowedCourse(
+        normalizedCourse
+      )
+    ) {
+      return res.status(400).json({
+        message:
+          'Valid course is required',
+      });
+    }
+
+    const enrollment =
+      await resolveStudentEnrollment(
+        branchId,
+        intakeId,
+        batchId
+      );
+
+    if (enrollment?.error) {
+      return res.status(400).json({
+        message:
+          enrollment.error,
+      });
+    }
+
+    const existing =
+      await Student.findOne({
+        _id: {
+          $ne:
+            student._id,
+        },
+
+        $or: [
+          {
+            email:
+              normalizedEmail,
+          },
+
+          {
+            studentId:
+              safeTrim(
+                studentId
+              ),
+          },
+        ],
+      }).lean();
+
+    if (existing) {
+      return res.status(409).json({
+        message:
+          'Email or Student ID already exists',
+      });
+    }
+
+    student.fullName =
+      safeTrim(fullName);
+
+    student.email =
+      normalizedEmail;
+
+    student.studentId =
+      safeTrim(studentId);
+
+    student.nic =
+      safeTrim(nic);
+
+    student.course =
+      normalizedCourse;
+
+    student.whatsappNumber =
+      safeTrim(
+        whatsappNumber
+      );
+
+    student.phoneNumber =
+      safeTrim(
+        phoneNumber
+      );
+
+    student.address =
+      safeTrim(address);
+
+    student.school =
+      safeTrim(school);
+
+    student.olResult =
+      safeTrim(olResult);
+
+    student.olMath =
+      safeTrim(olMath);
+
+    student.olEnglish =
+      safeTrim(olEnglish);
+
+    student.guardianName =
+      safeTrim(
+        guardianName
+      );
+
+    student.guardianPhoneNumber =
+      safeTrim(
+        guardianPhoneNumber
+      );
+
+    student.branchId =
+      enrollment.branchId;
+
+    student.intakeId =
+      enrollment.intakeId;
+
+    student.batchId =
+      enrollment.batchId;
 
     await student.save();
 
-    await logAdminAction(req.adminAuth?.id, 'EDIT_STUDENT', {
-      studentId: student._id,
-      studentEmail: student.email,
-      course: student.course,
-      branchId: student.branchId,
-      intakeId: student.intakeId,
-      batchId: student.batchId,
-    });
+    await logAdminAction(
+      req.adminAuth?.id,
+      'EDIT_STUDENT',
+      {
+        studentMongoId:
+          student._id,
 
-    res.json({ student: toStudentListItem(student) });
+        studentId:
+          student.studentId,
+
+        studentEmail:
+          student.email,
+
+        course:
+          student.course,
+
+        branchId:
+          student.branchId,
+
+        intakeId:
+          student.intakeId,
+
+        batchId:
+          student.batchId,
+      }
+    );
+
+    res.json({
+      student:
+        toStudentListItem(
+          student
+        ),
+    });
   } catch (err) {
     if (err?.code === 11000) {
-      return res.status(409).json({ message: 'Email or Student ID already exists' });
+      return res.status(409).json({
+        message:
+          'Email or Student ID already exists',
+      });
     }
+
     next(err);
   }
 }
 
-export async function deleteStudentByAdmin(req, res, next) {
+export async function deleteStudentByAdmin(
+  req,
+  res,
+  next
+) {
   try {
-    const { id } = req.params;
-    if (!id) return res.status(400).json({ message: 'Student ID is required' });
+    const { id } =
+      req.params;
 
-    const student = await Student.findById(id).lean();
-    if (!student) return res.status(404).json({ message: 'Student not found' });
+    if (!id) {
+      return res.status(400).json({
+        message:
+          'Student ID is required',
+      });
+    }
 
-    await Student.findByIdAndDelete(id);
+    const student =
+      await Student.findById(
+        id
+      ).lean();
 
-    await logAdminAction(req.adminAuth?.id, 'DELETE_STUDENT', {
-      studentId: id,
-      studentEmail: student.email,
-      studentStudentId: student.studentId,
-      studentName: student.fullName,
+    if (!student) {
+      return res.status(404).json({
+        message:
+          'Student not found',
+      });
+    }
+
+    await Student.findByIdAndDelete(
+      id
+    );
+
+    await logAdminAction(
+      req.adminAuth?.id,
+      'DELETE_STUDENT',
+      {
+        studentId:
+          id,
+
+        studentEmail:
+          student.email,
+
+        studentStudentId:
+          student.studentId,
+
+        studentName:
+          student.fullName,
+      }
+    );
+
+    return res.json({
+      message:
+        'Student account deleted successfully',
     });
-
-    return res.json({ message: 'Student account deleted successfully' });
   } catch (err) {
     next(err);
   }
 }
 
-export async function listAppDataKeys(req, res, next) {
+/* =========================================================
+   APP DATA
+========================================================= */
+
+export async function listAppDataKeys(
+  req,
+  res,
+  next
+) {
   try {
-    const keys = await AppData.find({}, { key: 1, _id: 0 }).sort({ key: 1 }).lean();
-    res.json({ keys: keys.map((d) => d.key) });
+    const keys =
+      await AppData.find(
+        {},
+        {
+          key: 1,
+          _id: 0,
+        }
+      )
+        .sort({
+          key: 1,
+        })
+        .lean();
+
+    res.json({
+      keys: keys.map(
+        (document) =>
+          document.key
+      ),
+    });
   } catch (err) {
     next(err);
   }
 }
 
-export async function getAppDataByKey(req, res, next) {
+export async function getAppDataByKey(
+  req,
+  res,
+  next
+) {
   try {
-    const { key } = req.params;
-    if (!isSafeKey(key)) return res.status(400).json({ message: 'Invalid key' });
+    const { key } =
+      req.params;
 
-    const doc = await AppData.findOne({ key }).lean();
-    if (!doc) return res.status(404).json({ message: 'Not found' });
+    if (!isSafeKey(key)) {
+      return res.status(400).json({
+        message:
+          'Invalid key',
+      });
+    }
 
-    res.json({ key: doc.key, payload: doc.payload, updatedAt: doc.updatedAt });
+    const doc =
+      await AppData.findOne({
+        key,
+      }).lean();
+
+    if (!doc) {
+      return res.status(404).json({
+        message:
+          'Not found',
+      });
+    }
+
+    res.json({
+      key:
+        doc.key,
+
+      payload:
+        doc.payload,
+
+      updatedAt:
+        doc.updatedAt,
+    });
   } catch (err) {
     next(err);
   }
 }
 
-export async function upsertAppDataByKey(req, res, next) {
+export async function upsertAppDataByKey(
+  req,
+  res,
+  next
+) {
   try {
-    const { key } = req.params;
-    if (!isSafeKey(key)) return res.status(400).json({ message: 'Invalid key' });
+    const { key } =
+      req.params;
 
-    const { payload } = req.body || {};
-    if (payload === undefined) return res.status(400).json({ message: 'payload is required' });
+    if (!isSafeKey(key)) {
+      return res.status(400).json({
+        message:
+          'Invalid key',
+      });
+    }
 
-    const updated = await AppData.findOneAndUpdate(
-      { key },
-      { $set: { key, payload } },
-      { upsert: true, new: true }
-    ).lean();
+    const { payload } =
+      req.body || {};
 
-    res.json({ key: updated.key, payload: updated.payload, updatedAt: updated.updatedAt });
+    if (
+      payload === undefined
+    ) {
+      return res.status(400).json({
+        message:
+          'payload is required',
+      });
+    }
+
+    const updated =
+      await AppData.findOneAndUpdate(
+        {
+          key,
+        },
+        {
+          $set: {
+            key,
+            payload,
+          },
+        },
+        {
+          upsert: true,
+          new: true,
+        }
+      ).lean();
+
+    res.json({
+      key:
+        updated.key,
+
+      payload:
+        updated.payload,
+
+      updatedAt:
+        updated.updatedAt,
+    });
   } catch (err) {
     next(err);
   }
 }
 
-// Edit staff admin (superadmin only)
-export async function editStaffUser(req, res, next) {
+/* =========================================================
+   EDIT STAFF ADMIN
+========================================================= */
+
+export async function editStaffUser(
+  req,
+  res,
+  next
+) {
   try {
-    const { id } = req.params;
-    const { name, email, password } = req.body || {};
-    
-    if (!id) return res.status(400).json({ message: 'Admin ID is required' });
-    
-    const admin = await Admin.findById(id).lean();
-    if (!admin) return res.status(404).json({ message: 'Admin not found' });
-    
-    // Prevent editing superadmin accounts (only staff can be edited)
-    if (admin.role === 'superadmin') {
-      return res.status(403).json({ message: 'Cannot edit superadmin accounts' });
+    const { id } =
+      req.params;
+
+    const {
+      name,
+      email,
+      password,
+    } = req.body || {};
+
+    if (!id) {
+      return res.status(400).json({
+        message:
+          'Admin ID is required',
+      });
+    }
+
+    const admin =
+      await Admin.findById(
+        id
+      ).lean();
+
+    if (!admin) {
+      return res.status(404).json({
+        message:
+          'Admin not found',
+      });
+    }
+
+    if (
+      admin.role ===
+      'superadmin'
+    ) {
+      return res.status(403).json({
+        message:
+          'Cannot edit superadmin accounts',
+      });
     }
 
     const updateData = {};
-    
-    if (name && safeTrim(name)) {
-      updateData.name = safeTrim(name);
+
+    if (
+      name &&
+      safeTrim(name)
+    ) {
+      updateData.name =
+        safeTrim(name);
     }
-    
+
     if (email) {
-      const normalizedEmail = normalizeEmail(email);
-      if (!isValidEmail(normalizedEmail)) {
-        return res.status(400).json({ message: 'Valid email is required' });
+      const normalizedEmail =
+        normalizeEmail(email);
+
+      if (
+        !isValidEmail(
+          normalizedEmail
+        )
+      ) {
+        return res.status(400).json({
+          message:
+            'Valid email is required',
+        });
       }
-      
-      // Check if email is already used by another admin
-      const existing = await Admin.findOne({ 
-        email: normalizedEmail, 
-        _id: { $ne: id } 
-      }).lean();
+
+      const existing =
+        await Admin.findOne({
+          email:
+            normalizedEmail,
+
+          _id: {
+            $ne: id,
+          },
+        }).lean();
+
       if (existing) {
-        return res.status(409).json({ message: 'Email already exists' });
+        return res.status(409).json({
+          message:
+            'Email already exists',
+        });
       }
-      
-      updateData.email = normalizedEmail;
-    }
-    
-    if (password && typeof password === 'string' && password.trim().length >= 8) {
-      updateData.passwordHash = await bcrypt.hash(password.trim(), 12);
+
+      updateData.email =
+        normalizedEmail;
     }
 
-    const updated = await Admin.findByIdAndUpdate(id, updateData, { new: true }).lean();
-    
-    // Log the action
-    await logAdminAction(req.adminAuth?.id, 'EDIT_STAFF_ADMIN', {
-      staffAdminId: id,
-      changes: Object.keys(updateData),
-      staffAdminEmail: updated.email
+    if (
+      password &&
+      typeof password ===
+        'string'
+    ) {
+      if (
+        password.trim().length <
+        8
+      ) {
+        return res.status(400).json({
+          message:
+            'Password must be at least 8 characters',
+        });
+      }
+
+      updateData.passwordHash =
+        await bcrypt.hash(
+          password.trim(),
+          12
+        );
+    }
+
+    const updated =
+      await Admin.findByIdAndUpdate(
+        id,
+        updateData,
+        {
+          new: true,
+        }
+      ).lean();
+
+    await logAdminAction(
+      req.adminAuth?.id,
+      'EDIT_STAFF_ADMIN',
+      {
+        staffAdminId:
+          id,
+
+        changes:
+          Object.keys(
+            updateData
+          ),
+
+        staffAdminEmail:
+          updated.email,
+      }
+    );
+
+    res.json({
+      user:
+        toAdminListItem(
+          updated
+        ),
     });
-
-    res.json({ user: toAdminListItem(updated) });
   } catch (err) {
     if (err?.code === 11000) {
-      return res.status(409).json({ message: 'Email already exists' });
+      return res.status(409).json({
+        message:
+          'Email already exists',
+      });
     }
+
     next(err);
   }
 }
 
-// Delete staff admin (superadmin only)
-export async function deleteStaffUser(req, res, next) {
+/* =========================================================
+   DELETE STAFF ADMIN
+========================================================= */
+
+export async function deleteStaffUser(
+  req,
+  res,
+  next
+) {
   try {
-    const { id } = req.params;
-    
-    if (!id) return res.status(400).json({ message: 'Admin ID is required' });
-    
-    const admin = await Admin.findById(id).lean();
-    if (!admin) return res.status(404).json({ message: 'Admin not found' });
-    
-    // Prevent deleting superadmin accounts
-    if (admin.role === 'superadmin') {
-      return res.status(403).json({ message: 'Cannot delete superadmin accounts' });
-    }
-    
-    // Prevent self-deletion
-    if (String(admin._id) === String(req.adminAuth?.id)) {
-      return res.status(403).json({ message: 'Cannot delete your own account' });
+    const { id } =
+      req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        message:
+          'Admin ID is required',
+      });
     }
 
-    await Admin.findByIdAndDelete(id);
-    
-    // Log the action
-    await logAdminAction(req.adminAuth?.id, 'DELETE_STAFF_ADMIN', {
-      staffAdminId: id,
-      staffAdminEmail: admin.email,
-      staffAdminName: admin.name
+    const admin =
+      await Admin.findById(
+        id
+      ).lean();
+
+    if (!admin) {
+      return res.status(404).json({
+        message:
+          'Admin not found',
+      });
+    }
+
+    if (
+      admin.role ===
+      'superadmin'
+    ) {
+      return res.status(403).json({
+        message:
+          'Cannot delete superadmin accounts',
+      });
+    }
+
+    if (
+      String(admin._id) ===
+      String(
+        req.adminAuth?.id
+      )
+    ) {
+      return res.status(403).json({
+        message:
+          'Cannot delete your own account',
+      });
+    }
+
+    await Admin.findByIdAndDelete(
+      id
+    );
+
+    await logAdminAction(
+      req.adminAuth?.id,
+      'DELETE_STAFF_ADMIN',
+      {
+        staffAdminId:
+          id,
+
+        staffAdminEmail:
+          admin.email,
+
+        staffAdminName:
+          admin.name,
+      }
+    );
+
+    res.json({
+      message:
+        'Admin account deleted successfully',
     });
-
-    res.json({ message: 'Admin account deleted successfully' });
   } catch (err) {
     next(err);
   }

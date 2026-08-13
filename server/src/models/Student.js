@@ -2,8 +2,8 @@ import mongoose from 'mongoose';
 
 const { Schema } = mongoose;
 
-// Enum for targeted materials and strict data enforcement
-const STUDENT_COURSES = [
+// Courses / Diplomas available for students
+export const STUDENT_COURSES = [
   'Cabin Crew',
   'Ground Operations',
   'Ticketing & Reservations',
@@ -12,8 +12,16 @@ const STUDENT_COURSES = [
 
 const StudentSchema = new Schema(
   {
-    // --- Personal Details ---
-    fullName: { type: String, required: true, trim: true, maxlength: 120 },
+    // =========================
+    // Personal Details
+    // =========================
+    fullName: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 120,
+    },
+
     email: {
       type: String,
       required: true,
@@ -23,56 +31,203 @@ const StudentSchema = new Schema(
       unique: true,
       index: true,
     },
-    studentId: { type: String, required: true, trim: true, maxlength: 40, unique: true, index: true },
-    dob: { type: Date, required: true },
-    gender: { type: String, required: true, enum: ['male', 'female', 'other'], lowercase: true, trim: true },
-    nic: { type: String, trim: true, maxlength: 40 },
-    
-    // --- Targeted Course ---
-    course: { 
-      type: String, 
-      required: true, // Crucial for Targeted Materials
-      trim: true, 
-      enum: STUDENT_COURSES, 
-      index: true 
+
+    studentId: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 40,
+      unique: true,
+      index: true,
     },
 
-    // --- Contact Details ---
-    whatsappNumber: { type: String, trim: true, maxlength: 30 },
-    phoneNumber: { type: String, trim: true, maxlength: 30 },
-    address: { type: String, trim: true, maxlength: 300 },
+    dob: {
+      type: Date,
+      required: true,
+    },
 
-    // --- Educational Background ---
-    school: { type: String, trim: true, maxlength: 150 },
-    olResult: { type: String, trim: true, maxlength: 50 },
-    olMath: { type: String, trim: true, maxlength: 20 },
-    olEnglish: { type: String, trim: true, maxlength: 20 },
+    gender: {
+      type: String,
+      required: true,
+      enum: ['male', 'female', 'other'],
+      lowercase: true,
+      trim: true,
+    },
 
-    // --- Emergency Contact ---
-    guardianName: { type: String, trim: true, maxlength: 120 },
-    guardianPhoneNumber: { type: String, trim: true, maxlength: 30 },
+    nic: {
+      type: String,
+      trim: true,
+      maxlength: 40,
+    },
 
-    // --- Academic Hierarchy Association ---
-    // New structure: Branch → Intake → Batch
-    branchId: { type: String, trim: true, maxlength: 64, index: true },
-    intakeId: { type: String, trim: true, maxlength: 64, index: true },
-    batchId: { type: String, trim: true, maxlength: 64, index: true },
-    
-    // Legacy structure (keep for backward compatibility)
-    facultyId: { type: String, trim: true, maxlength: 64, index: true },
-    programId: { type: String, trim: true, maxlength: 64, index: true },
+    // =========================
+    // Diploma / Course
+    // =========================
+    course: {
+      type: String,
+      required: true,
+      trim: true,
+      enum: STUDENT_COURSES,
+      index: true,
+    },
 
-    // --- Security ---
-    passwordHash: { type: String, required: true },
+    // =========================
+    // Contact Details
+    // =========================
+    whatsappNumber: {
+      type: String,
+      trim: true,
+      maxlength: 30,
+    },
 
-    // Password reset (forgot password)
-    resetPasswordTokenHash: { type: String, trim: true, maxlength: 128, index: true },
-    resetPasswordTokenExpiresAt: { type: Date, index: true },
-    
-    // Source of creation: 'self' = user registered, 'admin' = created by admin
-    createdBy: { type: String, trim: true, maxlength: 16, default: 'self', index: true },
+    phoneNumber: {
+      type: String,
+      trim: true,
+      maxlength: 30,
+    },
+
+    address: {
+      type: String,
+      trim: true,
+      maxlength: 300,
+    },
+
+    // =========================
+    // Educational Background
+    // =========================
+    school: {
+      type: String,
+      trim: true,
+      maxlength: 150,
+    },
+
+    olResult: {
+      type: String,
+      trim: true,
+      maxlength: 50,
+    },
+
+    olMath: {
+      type: String,
+      trim: true,
+      maxlength: 20,
+    },
+
+    olEnglish: {
+      type: String,
+      trim: true,
+      maxlength: 20,
+    },
+
+    // =========================
+    // Emergency Contact
+    // =========================
+    guardianName: {
+      type: String,
+      trim: true,
+      maxlength: 120,
+    },
+
+    guardianPhoneNumber: {
+      type: String,
+      trim: true,
+      maxlength: 30,
+    },
+
+    // =========================
+    // Academic Hierarchy
+    // Branch -> Intake -> Batch
+    // =========================
+    branchId: {
+      type: String,
+      trim: true,
+      maxlength: 64,
+      index: true,
+    },
+
+    intakeId: {
+      type: String,
+      trim: true,
+      maxlength: 64,
+      index: true,
+    },
+
+    batchId: {
+      type: String,
+      trim: true,
+      maxlength: 64,
+      index: true,
+    },
+
+    // =========================
+    // Legacy Structure
+    // Keep for backward compatibility
+    // =========================
+    facultyId: {
+      type: String,
+      trim: true,
+      maxlength: 64,
+      index: true,
+    },
+
+    programId: {
+      type: String,
+      trim: true,
+      maxlength: 64,
+      index: true,
+    },
+
+    // =========================
+    // Security
+    // =========================
+    passwordHash: {
+      type: String,
+      required: true,
+      select: false,
+    },
+
+    resetPasswordTokenHash: {
+      type: String,
+      trim: true,
+      maxlength: 128,
+      index: true,
+      select: false,
+    },
+
+    resetPasswordTokenExpiresAt: {
+      type: Date,
+      index: true,
+      select: false,
+    },
+
+    // =========================
+    // Creation Source
+    // =========================
+    createdBy: {
+      type: String,
+      trim: true,
+      maxlength: 16,
+      default: 'self',
+      index: true,
+    },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-export const Student = mongoose.models.Student || mongoose.model('Student', StudentSchema);
+// Useful compound index for result/student filtering.
+//
+// This makes:
+// Branch + Batch + Diploma/Course
+//
+// searches faster.
+StudentSchema.index({
+  branchId: 1,
+  batchId: 1,
+  course: 1,
+});
+
+export const Student =
+  mongoose.models.Student ||
+  mongoose.model('Student', StudentSchema);

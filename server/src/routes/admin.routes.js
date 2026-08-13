@@ -1,5 +1,11 @@
 import { Router } from 'express';
-import { requireAdminForAppDataKey, requireAdminRole, requirePermission } from '../middleware/adminAuth.js';
+
+import {
+  requireAdminForAppDataKey,
+  requireAdminRole,
+  requirePermission,
+} from '../middleware/adminAuth.js';
+
 import {
   createStudentByAdmin,
   createStaffUser,
@@ -12,9 +18,11 @@ import {
   listAdminUsers,
   listAppDataKeys,
   listStudents,
+  listStudentsForResults,
   updateStudentByAdmin,
   upsertAppDataByKey,
 } from '../controllers/admin.controller.js';
+
 import {
   listFaculties,
   listIntakes,
@@ -24,28 +32,195 @@ import {
 
 export const adminRouter = Router();
 
-adminRouter.get('/metrics', requireAdminRole(['superadmin', 'staff']), getAdminMetrics);
+/* =========================================================
+   ADMIN DASHBOARD
+========================================================= */
 
-// Admin user management (superadmin only)
-adminRouter.get('/users', requirePermission('VIEW_ANALYTICS'), listAdminUsers);
-adminRouter.post('/users', requirePermission('CREATE_STAFF_ADMIN'), createStaffUser);
-adminRouter.put('/users/:id', requirePermission('EDIT_STAFF_ADMIN'), editStaffUser);
-adminRouter.delete('/users/:id', requirePermission('DELETE_STAFF_ADMIN'), deleteStaffUser);
+adminRouter.get(
+  '/metrics',
+  requireAdminRole(['superadmin', 'staff']),
+  getAdminMetrics
+);
 
-// Student management (both roles can view and create)
-adminRouter.get('/students', requirePermission('VIEW_STUDENTS'), listStudents);
-adminRouter.get('/students/:id', requirePermission('VIEW_STUDENTS'), getStudentById);
-adminRouter.post('/students', requirePermission('CREATE_STUDENT'), createStudentByAdmin);
-adminRouter.put('/students/:id', requirePermission('EDIT_STUDENT'), updateStudentByAdmin);
-adminRouter.delete('/students/:id', requirePermission('DELETE_STUDENT'), deleteStudentByAdmin);
+/* =========================================================
+   ADMIN USER MANAGEMENT
+   Superadmin permissions
+========================================================= */
 
-// App data management with enhanced permissions
-adminRouter.get('/app-data/keys', requireAdminRole('superadmin'), listAppDataKeys);
-adminRouter.get('/app-data/:key', requireAdminForAppDataKey({ mode: 'read' }), getAppDataByKey);
-adminRouter.put('/app-data/:key', requireAdminForAppDataKey({ mode: 'write' }), upsertAppDataByKey);
+adminRouter.get(
+  '/users',
+  requirePermission('VIEW_ANALYTICS'),
+  listAdminUsers
+);
 
-// Academic hierarchy management (superadmin only for management, staff can view)
-adminRouter.get('/academics/faculties', requireAdminRole(['superadmin', 'staff']), listFaculties);
-adminRouter.get('/academics/programs', requireAdminRole(['superadmin', 'staff']), listPrograms);
-adminRouter.get('/academics/intakes', requireAdminRole(['superadmin', 'staff']), listIntakes);
-adminRouter.get('/academics/subjects', requireAdminRole(['superadmin', 'staff']), listSubjects);
+adminRouter.post(
+  '/users',
+  requirePermission('CREATE_STAFF_ADMIN'),
+  createStaffUser
+);
+
+adminRouter.put(
+  '/users/:id',
+  requirePermission('EDIT_STAFF_ADMIN'),
+  editStaffUser
+);
+
+adminRouter.delete(
+  '/users/:id',
+  requirePermission('DELETE_STAFF_ADMIN'),
+  deleteStaffUser
+);
+
+/* =========================================================
+   STUDENT MANAGEMENT
+========================================================= */
+
+/*
+Normal student list
+
+Examples:
+
+GET /api/admin/students
+
+GET /api/admin/students?branchId=branch1
+
+GET /api/admin/students?
+branchId=branch1
+&batchId=batch1
+&course=Cabin%20Crew
+*/
+adminRouter.get(
+  '/students',
+  requirePermission('VIEW_STUDENTS'),
+  listStudents
+);
+
+/*
+Results student filtering
+
+IMPORTANT:
+This route must stay ABOVE:
+
+/students/:id
+
+Otherwise Express may think "results" is a student ID.
+
+Example:
+
+GET /api/admin/students/results
+  ?branchId=branch1
+  &batchId=batch1
+  &course=Cabin%20Crew
+
+Response:
+
+{
+  "count": 2,
+  "students": [
+    {
+      "id": "...",
+      "studentId": "IAAC001",
+      "fullName": "Student One"
+    }
+  ]
+}
+*/
+adminRouter.get(
+  '/students/results',
+  requirePermission('VIEW_STUDENTS'),
+  listStudentsForResults
+);
+
+/*
+Get one student
+*/
+adminRouter.get(
+  '/students/:id',
+  requirePermission('VIEW_STUDENTS'),
+  getStudentById
+);
+
+/*
+Create student
+*/
+adminRouter.post(
+  '/students',
+  requirePermission('CREATE_STUDENT'),
+  createStudentByAdmin
+);
+
+/*
+Update student
+*/
+adminRouter.put(
+  '/students/:id',
+  requirePermission('EDIT_STUDENT'),
+  updateStudentByAdmin
+);
+
+/*
+Delete student
+*/
+adminRouter.delete(
+  '/students/:id',
+  requirePermission('DELETE_STUDENT'),
+  deleteStudentByAdmin
+);
+
+/* =========================================================
+   APP DATA MANAGEMENT
+========================================================= */
+
+adminRouter.get(
+  '/app-data/keys',
+  requireAdminRole('superadmin'),
+  listAppDataKeys
+);
+
+adminRouter.get(
+  '/app-data/:key',
+  requireAdminForAppDataKey({
+    mode: 'read',
+  }),
+  getAppDataByKey
+);
+
+adminRouter.put(
+  '/app-data/:key',
+  requireAdminForAppDataKey({
+    mode: 'write',
+  }),
+  upsertAppDataByKey
+);
+
+/* =========================================================
+   ACADEMIC HIERARCHY
+========================================================= */
+
+/*
+Both superadmin and staff can view academic hierarchy.
+*/
+
+adminRouter.get(
+  '/academics/faculties',
+  requireAdminRole(['superadmin', 'staff']),
+  listFaculties
+);
+
+adminRouter.get(
+  '/academics/programs',
+  requireAdminRole(['superadmin', 'staff']),
+  listPrograms
+);
+
+adminRouter.get(
+  '/academics/intakes',
+  requireAdminRole(['superadmin', 'staff']),
+  listIntakes
+);
+
+adminRouter.get(
+  '/academics/subjects',
+  requireAdminRole(['superadmin', 'staff']),
+  listSubjects
+);
