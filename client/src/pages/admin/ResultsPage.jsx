@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { apiGet, apiPost } from '../../api/http.js';
+import {
+  apiGet,
+  apiPost,
+  apiPut,
+  apiDelete,
+} from '../../api/http.js';
+
 import { getAcademics } from '../../services/academicsAdmin.service.js';
 
 const COURSES = [
@@ -40,6 +46,21 @@ export default function ResultsPage() {
   const [rows, setRows] = useState([]);
 
   /* =========================================================
+     SAVED RESULTS
+  ========================================================= */
+
+  const [savedResults, setSavedResults] = useState([]);
+  const [savedResultsLoading, setSavedResultsLoading] = useState(false);
+
+  /* =========================================================
+     EDITING
+  ========================================================= */
+
+  const [editingResultId, setEditingResultId] = useState('');
+  const [editingPublished, setEditingPublished] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState('');
+
+  /* =========================================================
      UI STATE
   ========================================================= */
 
@@ -50,6 +71,7 @@ export default function ResultsPage() {
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [lastSavedStatus, setLastSavedStatus] = useState('');
 
   /* =========================================================
      HELPERS
@@ -104,9 +126,35 @@ export default function ResultsPage() {
       return 'PENDING';
     }
 
-    return value >= 40
-      ? 'PASS'
-      : 'FAIL';
+    return value >= 40 ? 'PASS' : 'FAIL';
+  }
+
+  function formatDate(value) {
+    if (!value) {
+      return '-';
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return '-';
+    }
+
+    return date.toLocaleDateString();
+  }
+
+  function dateInputValue(value) {
+    if (!value) {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    return date.toISOString().slice(0, 10);
   }
 
   /* =========================================================
@@ -158,6 +206,35 @@ export default function ResultsPage() {
   }, []);
 
   /* =========================================================
+     LOAD SAVED RESULTS
+  ========================================================= */
+
+  async function loadSavedResults() {
+    try {
+      setSavedResultsLoading(true);
+
+      const response = await apiGet('/api/results');
+
+      setSavedResults(
+        Array.isArray(response?.results)
+          ? response.results
+          : []
+      );
+    } catch (err) {
+      console.error(
+        'Failed to load saved results:',
+        err
+      );
+    } finally {
+      setSavedResultsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadSavedResults();
+  }, []);
+
+  /* =========================================================
      SELECTED BRANCH
   ========================================================= */
 
@@ -204,6 +281,9 @@ export default function ResultsPage() {
   ========================================================= */
 
   function handleBranchChange(value) {
+    setEditingResultId('');
+    setEditingPublished(false);
+
     setBranchId(value);
 
     setIntakeId('');
@@ -213,11 +293,17 @@ export default function ResultsPage() {
     setStudents([]);
     setRows([]);
 
+    setResultTitle('');
+
     setError('');
     setSuccess('');
+    setLastSavedStatus('');
   }
 
   function handleIntakeChange(value) {
+    setEditingResultId('');
+    setEditingPublished(false);
+
     setIntakeId(value);
 
     setBatchId('');
@@ -226,11 +312,17 @@ export default function ResultsPage() {
     setStudents([]);
     setRows([]);
 
+    setResultTitle('');
+
     setError('');
     setSuccess('');
+    setLastSavedStatus('');
   }
 
   function handleBatchChange(value) {
+    setEditingResultId('');
+    setEditingPublished(false);
+
     setBatchId(value);
 
     setCourse('');
@@ -238,8 +330,27 @@ export default function ResultsPage() {
     setStudents([]);
     setRows([]);
 
+    setResultTitle('');
+
     setError('');
     setSuccess('');
+    setLastSavedStatus('');
+  }
+
+  function handleCourseChange(value) {
+    setEditingResultId('');
+    setEditingPublished(false);
+
+    setCourse(value);
+
+    setResultTitle('');
+
+    setStudents([]);
+    setRows([]);
+
+    setError('');
+    setSuccess('');
+    setLastSavedStatus('');
   }
 
   /* =========================================================
@@ -254,6 +365,17 @@ export default function ResultsPage() {
   );
 
   useEffect(() => {
+    /*
+      IMPORTANT:
+
+      When editing an existing result, do not reload blank
+      students because that would overwrite the saved marks.
+    */
+
+    if (editingResultId) {
+      return;
+    }
+
     if (!canLoadStudents) {
       setStudents([]);
       setRows([]);
@@ -266,6 +388,7 @@ export default function ResultsPage() {
       setStudentsLoading(true);
       setError('');
       setSuccess('');
+      setLastSavedStatus('');
 
       try {
         const params = new URLSearchParams({
@@ -294,17 +417,12 @@ export default function ResultsPage() {
         setRows(
           loadedStudents.map((student) => ({
             student: student.id,
-
             studentId: student.studentId,
-
             studentName: student.fullName,
 
             marks: '',
-
             grade: '',
-
             status: 'PENDING',
-
             remarks: '',
           }))
         );
@@ -336,6 +454,7 @@ export default function ResultsPage() {
     intakeId,
     batchId,
     course,
+    editingResultId,
   ]);
 
   /* =========================================================
@@ -394,8 +513,8 @@ export default function ResultsPage() {
   ========================================================= */
 
   function validateResult({
-    publish,
-  }) {
+    publish = false,
+  } = {}) {
     if (!branchId) {
       return 'Please select a branch.';
     }
@@ -437,13 +556,6 @@ export default function ResultsPage() {
       return `Marks for ${invalidMarks.studentId} must be between 0 and 100.`;
     }
 
-    /*
-      When publishing, require every student
-      to have either:
-      - marks
-      OR
-      - ABSENT status
-    */
     if (publish) {
       const incompleteStudent = rows.find(
         (row) =>
@@ -464,7 +576,35 @@ export default function ResultsPage() {
   }
 
   /* =========================================================
-     SAVE RESULT
+     BUILD RESULT ROW PAYLOAD
+  ========================================================= */
+
+  function buildResultRowsPayload() {
+    return rows.map((row) => ({
+      student: row.student,
+
+      marks:
+        row.status === 'ABSENT'
+          ? null
+          : row.marks === ''
+            ? null
+            : Number(row.marks),
+
+      grade:
+        row.status === 'ABSENT'
+          ? ''
+          : String(row.grade || '').trim(),
+
+      status:
+        row.status,
+
+      remarks:
+        String(row.remarks || '').trim(),
+    }));
+  }
+
+  /* =========================================================
+     CREATE RESULT
   ========================================================= */
 
   async function saveResult({
@@ -472,6 +612,7 @@ export default function ResultsPage() {
   } = {}) {
     setError('');
     setSuccess('');
+    setLastSavedStatus('');
 
     const validationError =
       validateResult({
@@ -479,10 +620,7 @@ export default function ResultsPage() {
       });
 
     if (validationError) {
-      setError(
-        validationError
-      );
-
+      setError(validationError);
       return;
     }
 
@@ -500,52 +638,27 @@ export default function ResultsPage() {
         resultDate,
 
         branchId,
-
         intakeId,
-
         batchId,
-
         course,
 
-        /*
-          IMPORTANT:
-
-          true  -> student can see it
-          false -> saved as draft only
-        */
         isPublished:
           publish,
 
         results:
-          rows.map((row) => ({
-            student:
-              row.student,
-
-            marks:
-              row.status === 'ABSENT'
-                ? null
-                : row.marks === ''
-                  ? null
-                  : Number(row.marks),
-
-            grade:
-              row.status === 'ABSENT'
-                ? ''
-                : row.grade.trim(),
-
-            status:
-              row.status,
-
-            remarks:
-              row.remarks.trim(),
-          })),
+          buildResultRowsPayload(),
       };
 
-      const response =
-        await apiPost(
-          '/api/results',
-          payload
-        );
+      const response = await apiPost(
+        '/api/results',
+        payload
+      );
+
+      setLastSavedStatus(
+        publish
+          ? 'published'
+          : 'draft'
+      );
 
       setSuccess(
         publish
@@ -554,26 +667,10 @@ export default function ResultsPage() {
       );
 
       /*
-        Keep student group selected,
-        but clear result information.
+        Keep marks visible after save.
       */
 
-      setResultTitle('');
-
-      setRows((previous) =>
-        previous.map((row) => ({
-          ...row,
-
-          marks: '',
-
-          grade: '',
-
-          status:
-            'PENDING',
-
-          remarks: '',
-        }))
-      );
+      await loadSavedResults();
 
       return response;
     } catch (err) {
@@ -591,12 +688,371 @@ export default function ResultsPage() {
   }
 
   /* =========================================================
+     LOAD SAVED RESULT FOR EDITING
+  ========================================================= */
+
+  async function editSavedResult(resultId) {
+    if (!resultId) {
+      return;
+    }
+
+    try {
+      setError('');
+      setSuccess('');
+      setLastSavedStatus('');
+
+      setActionLoadingId(resultId);
+
+      const response = await apiGet(
+        `/api/results/${resultId}`
+      );
+
+      const result = response?.result;
+
+      if (!result) {
+        setError('Result not found.');
+        return;
+      }
+
+      /*
+        Set editing first so the automatic students useEffect
+        does not overwrite the result rows with blank marks.
+      */
+
+      setEditingResultId(result.id);
+      setEditingPublished(
+        Boolean(result.isPublished)
+      );
+
+      setBranchId(
+        result.branchId || ''
+      );
+
+      setIntakeId(
+        result.intakeId || ''
+      );
+
+      setBatchId(
+        result.batchId || ''
+      );
+
+      setCourse(
+        result.course || ''
+      );
+
+      setResultTitle(
+        result.resultTitle || ''
+      );
+
+      setResultDate(
+        dateInputValue(
+          result.resultDate
+        )
+      );
+
+      const resultRows =
+        Array.isArray(
+          result.results
+        )
+          ? result.results
+          : [];
+
+      const loadedRows =
+        resultRows.map(
+          (row) => ({
+            student:
+              row.student,
+
+            studentId:
+              row.studentId || '',
+
+            studentName:
+              row.studentName || '',
+
+            marks:
+              row.marks === null ||
+              row.marks === undefined
+                ? ''
+                : String(row.marks),
+
+            grade:
+              row.grade || '',
+
+            status:
+              row.status ||
+              'PENDING',
+
+            remarks:
+              row.remarks || '',
+          })
+        );
+
+      setRows(loadedRows);
+
+      setStudents(
+        loadedRows.map(
+          (row) => ({
+            id:
+              row.student,
+
+            studentId:
+              row.studentId,
+
+            fullName:
+              row.studentName,
+          })
+        )
+      );
+
+      setLastSavedStatus(
+        result.isPublished
+          ? 'published'
+          : 'draft'
+      );
+
+      setSuccess(
+        'Result loaded. You can now edit the marks and click Update Result.'
+      );
+
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth',
+      });
+    } catch (err) {
+      setError(
+        err?.message ||
+          'Failed to load result.'
+      );
+    } finally {
+      setActionLoadingId('');
+    }
+  }
+
+  /* =========================================================
+     UPDATE EXISTING RESULT
+  ========================================================= */
+
+  async function updateExistingResult() {
+    if (!editingResultId) {
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+
+    const validationError =
+      validateResult({
+        publish:
+          editingPublished,
+      });
+
+    if (validationError) {
+      setError(
+        validationError
+      );
+
+      return;
+    }
+
+    setSavingMode('update');
+
+    try {
+      const payload = {
+        resultTitle:
+          resultTitle.trim(),
+
+        resultDate,
+
+        results:
+          buildResultRowsPayload(),
+      };
+
+      await apiPut(
+        `/api/results/${editingResultId}`,
+        payload
+      );
+
+      setSuccess(
+        'Result updated successfully.'
+      );
+
+      setLastSavedStatus(
+        editingPublished
+          ? 'published'
+          : 'draft'
+      );
+
+      /*
+        Marks stay visible after update.
+      */
+
+      await loadSavedResults();
+    } catch (err) {
+      setError(
+        err?.message ||
+          'Failed to update result.'
+      );
+    } finally {
+      setSavingMode('');
+    }
+  }
+
+  /* =========================================================
+     CANCEL EDITING
+  ========================================================= */
+
+  function cancelEdit() {
+    setEditingResultId('');
+    setEditingPublished(false);
+
+    setResultTitle('');
+
+    setSuccess('');
+    setError('');
+    setLastSavedStatus('');
+
+    /*
+      The useEffect will reload the students for the currently
+      selected group and return the page to create mode.
+    */
+  }
+
+  /* =========================================================
+     DELETE SAVED RESULT
+  ========================================================= */
+
+  async function deleteSavedResult(result) {
+    if (!result?.id) {
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        `Are you sure you want to delete "${result.resultTitle || 'this result'}"?`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setError('');
+      setSuccess('');
+
+      setActionLoadingId(
+        result.id
+      );
+
+      await apiDelete(
+        `/api/results/${result.id}`
+      );
+
+      if (
+        editingResultId ===
+        result.id
+      ) {
+        setEditingResultId('');
+        setEditingPublished(false);
+        setResultTitle('');
+        setRows([]);
+        setStudents([]);
+        setLastSavedStatus('');
+      }
+
+      setSuccess(
+        'Result deleted successfully.'
+      );
+
+      await loadSavedResults();
+    } catch (err) {
+      setError(
+        err?.message ||
+          'Failed to delete result.'
+      );
+    } finally {
+      setActionLoadingId('');
+    }
+  }
+
+  /* =========================================================
+     PUBLISH / UNPUBLISH
+  ========================================================= */
+
+  async function togglePublish(result) {
+    if (!result?.id) {
+      return;
+    }
+
+    try {
+      setError('');
+      setSuccess('');
+
+      setActionLoadingId(
+        result.id
+      );
+
+      if (
+        result.isPublished
+      ) {
+        await apiPut(
+          `/api/results/${result.id}/unpublish`,
+          {}
+        );
+
+        setSuccess(
+          'Result unpublished successfully. Students can no longer see it.'
+        );
+      } else {
+        await apiPut(
+          `/api/results/${result.id}/publish`,
+          {}
+        );
+
+        setSuccess(
+          'Result published successfully. Students can now see it.'
+        );
+      }
+
+      /*
+        If the result currently being edited is the same result,
+        update its editing publication state too.
+      */
+
+      if (
+        editingResultId ===
+        result.id
+      ) {
+        setEditingPublished(
+          !result.isPublished
+        );
+
+        setLastSavedStatus(
+          result.isPublished
+            ? 'draft'
+            : 'published'
+        );
+      }
+
+      await loadSavedResults();
+    } catch (err) {
+      setError(
+        err?.message ||
+          'Failed to change publish status.'
+      );
+    } finally {
+      setActionLoadingId('');
+    }
+  }
+
+  /* =========================================================
      RENDER
   ========================================================= */
 
   return (
     <div className="space-y-6">
-      {/* PAGE HEADER */}
+      {/* =====================================================
+          PAGE HEADER
+      ===================================================== */}
 
       <div>
         <h1 className="text-2xl font-bold text-slate-900">
@@ -608,7 +1064,40 @@ export default function ResultsPage() {
         </p>
       </div>
 
-      {/* ERROR */}
+      {/* =====================================================
+          EDITING NOTICE
+      ===================================================== */}
+
+      {editingResultId ? (
+        <div className="flex flex-col gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-sm font-bold text-blue-800">
+              Editing saved result
+            </div>
+
+            <p className="mt-1 text-xs text-blue-700">
+              Change the marks, grade, status, remarks, title or date and click Update Result.
+            </p>
+          </div>
+
+          <span
+            className={[
+              'inline-flex w-fit rounded-full px-3 py-1 text-xs font-bold',
+              editingPublished
+                ? 'bg-emerald-100 text-emerald-700'
+                : 'bg-amber-100 text-amber-700',
+            ].join(' ')}
+          >
+            {editingPublished
+              ? 'Published'
+              : 'Draft'}
+          </span>
+        </div>
+      ) : null}
+
+      {/* =====================================================
+          ERROR
+      ===================================================== */}
 
       {error ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
@@ -616,7 +1105,9 @@ export default function ResultsPage() {
         </div>
       ) : null}
 
-      {/* SUCCESS */}
+      {/* =====================================================
+          SUCCESS
+      ===================================================== */}
 
       {success ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
@@ -624,11 +1115,15 @@ export default function ResultsPage() {
         </div>
       ) : null}
 
-      {/* ADD RESULT */}
+      {/* =====================================================
+          ADD / EDIT RESULT
+      ===================================================== */}
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <h2 className="mb-5 text-xl font-bold text-slate-900">
-          Add Result
+          {editingResultId
+            ? 'Edit Result'
+            : 'Add Result'}
         </h2>
 
         <div className="grid gap-5 md:grid-cols-2">
@@ -647,7 +1142,10 @@ export default function ResultsPage() {
                 )
               }
               disabled={
-                hierarchyLoading
+                hierarchyLoading ||
+                Boolean(
+                  editingResultId
+                )
               }
               className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
             >
@@ -693,16 +1191,17 @@ export default function ResultsPage() {
                 )
               }
               disabled={
+                Boolean(
+                  editingResultId
+                ) ||
                 !branchId ||
-                intakes.length ===
-                  0
+                intakes.length === 0
               }
               className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
             >
               <option value="">
                 {branchId &&
-                intakes.length ===
-                  0
+                intakes.length === 0
                   ? 'No intakes available'
                   : 'Select intake'}
               </option>
@@ -743,16 +1242,17 @@ export default function ResultsPage() {
                 )
               }
               disabled={
+                Boolean(
+                  editingResultId
+                ) ||
                 !intakeId ||
-                batches.length ===
-                  0
+                batches.length === 0
               }
               className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
             >
               <option value="">
                 {intakeId &&
-                batches.length ===
-                  0
+                batches.length === 0
                   ? 'No batches available'
                   : 'Select batch'}
               </option>
@@ -788,11 +1288,14 @@ export default function ResultsPage() {
             <select
               value={course}
               onChange={(event) =>
-                setCourse(
+                handleCourseChange(
                   event.target.value
                 )
               }
               disabled={
+                Boolean(
+                  editingResultId
+                ) ||
                 !batchId
               }
               className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
@@ -823,9 +1326,7 @@ export default function ResultsPage() {
 
             <input
               type="date"
-              value={
-                resultDate
-              }
+              value={resultDate}
               onChange={(event) =>
                 setResultDate(
                   event.target.value
@@ -844,9 +1345,7 @@ export default function ResultsPage() {
 
             <input
               type="text"
-              value={
-                resultTitle
-              }
+              value={resultTitle}
               onChange={(event) =>
                 setResultTitle(
                   event.target.value
@@ -859,7 +1358,9 @@ export default function ResultsPage() {
         </div>
       </div>
 
-      {/* STUDENTS */}
+      {/* =====================================================
+          STUDENTS
+      ===================================================== */}
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-5 py-4">
@@ -917,16 +1418,14 @@ export default function ResultsPage() {
                     className="hover:bg-slate-50/60"
                   >
                     <td className="whitespace-nowrap px-4 py-3 text-sm font-semibold text-slate-800">
-                      {
-                        row.studentId
-                      }
+                      {row.studentId}
                     </td>
 
                     <td className="px-4 py-3 text-sm text-slate-700">
-                      {
-                        row.studentName
-                      }
+                      {row.studentName}
                     </td>
+
+                    {/* MARKS */}
 
                     <td className="px-4 py-3">
                       <input
@@ -945,14 +1444,14 @@ export default function ResultsPage() {
                         ) =>
                           handleMarksChange(
                             index,
-                            event
-                              .target
-                              .value
+                            event.target.value
                           )
                         }
-                        className="w-24 rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+                        className="w-24 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
                       />
                     </td>
+
+                    {/* GRADE */}
 
                     <td className="px-4 py-3">
                       <input
@@ -970,14 +1469,14 @@ export default function ResultsPage() {
                           updateRow(
                             index,
                             'grade',
-                            event
-                              .target
-                              .value
+                            event.target.value
                           )
                         }
-                        className="w-20 rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+                        className="w-20 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
                       />
                     </td>
+
+                    {/* STATUS */}
 
                     <td className="px-4 py-3">
                       <select
@@ -988,9 +1487,7 @@ export default function ResultsPage() {
                           event
                         ) => {
                           const value =
-                            event
-                              .target
-                              .value;
+                            event.target.value;
 
                           setRows(
                             (
@@ -1014,7 +1511,6 @@ export default function ResultsPage() {
                                           ? {
                                               marks:
                                                 '',
-
                                               grade:
                                                 '',
                                             }
@@ -1024,7 +1520,7 @@ export default function ResultsPage() {
                               )
                           );
                         }}
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                       >
                         <option value="PENDING">
                           Pending
@@ -1044,6 +1540,8 @@ export default function ResultsPage() {
                       </select>
                     </td>
 
+                    {/* REMARKS */}
+
                     <td className="px-4 py-3">
                       <input
                         type="text"
@@ -1056,13 +1554,11 @@ export default function ResultsPage() {
                           updateRow(
                             index,
                             'remarks',
-                            event
-                              .target
-                              .value
+                            event.target.value
                           )
                         }
                         placeholder="Optional"
-                        className="min-w-48 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        className="min-w-48 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                       />
                     </td>
                   </tr>
@@ -1095,7 +1591,9 @@ export default function ResultsPage() {
           </table>
         </div>
 
-        {/* ACTION BUTTONS */}
+        {/* =================================================
+            ACTION AREA
+        ================================================= */}
 
         <div className="flex flex-col gap-4 border-t border-slate-200 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -1108,60 +1606,327 @@ export default function ResultsPage() {
             <p className="mt-1 text-xs text-slate-500">
               Draft results are hidden from students. Published results appear in My Results.
             </p>
+
+            {lastSavedStatus ? (
+              <div className="mt-3">
+                <span
+                  className={[
+                    'inline-flex items-center rounded-full px-3 py-1 text-xs font-bold',
+                    lastSavedStatus ===
+                    'published'
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : 'bg-amber-100 text-amber-700',
+                  ].join(' ')}
+                >
+                  {lastSavedStatus ===
+                  'published'
+                    ? 'Published'
+                    : 'Draft'}
+                </span>
+              </div>
+            ) : null}
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row">
-            {/* SAVE DRAFT */}
+            {/* =================================================
+                EDIT MODE
+            ================================================= */}
 
-            <button
-              type="button"
-              onClick={() =>
-                saveResult({
-                  publish:
-                    false,
-                })
-              }
-              disabled={
-                Boolean(
-                  savingMode
-                ) ||
-                rows.length ===
-                  0
-              }
-              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#003580] bg-white px-6 py-2.5 text-sm font-bold text-[#003580] transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {savingMode ===
-              'draft'
-                ? 'Saving...'
-                : 'Save Draft'}
-            </button>
+            {editingResultId ? (
+              <>
+                <button
+                  type="button"
+                  onClick={
+                    cancelEdit
+                  }
+                  disabled={
+                    Boolean(
+                      savingMode
+                    )
+                  }
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-6 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Cancel
+                </button>
 
-            {/* SAVE AND PUBLISH */}
+                <button
+                  type="button"
+                  onClick={
+                    updateExistingResult
+                  }
+                  disabled={
+                    Boolean(
+                      savingMode
+                    ) ||
+                    rows.length ===
+                      0
+                  }
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#003580] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-[#002b68] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingMode ===
+                  'update'
+                    ? 'Updating...'
+                    : 'Update Result'}
+                </button>
+              </>
+            ) : (
+              <>
+                {/* SAVE DRAFT */}
 
-            <button
-              type="button"
-              onClick={() =>
-                saveResult({
-                  publish:
-                    true,
-                })
-              }
-              disabled={
-                Boolean(
-                  savingMode
-                ) ||
-                rows.length ===
-                  0
-              }
-              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#003580] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-[#002b68] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {savingMode ===
-              'publish'
-                ? 'Publishing...'
-                : 'Save & Publish'}
-            </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    saveResult({
+                      publish:
+                        false,
+                    })
+                  }
+                  disabled={
+                    Boolean(
+                      savingMode
+                    ) ||
+                    rows.length ===
+                      0
+                  }
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#003580] bg-white px-6 py-2.5 text-sm font-bold text-[#003580] transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingMode ===
+                  'draft'
+                    ? 'Saving...'
+                    : 'Save Draft'}
+                </button>
+
+                {/* SAVE & PUBLISH */}
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    saveResult({
+                      publish:
+                        true,
+                    })
+                  }
+                  disabled={
+                    Boolean(
+                      savingMode
+                    ) ||
+                    rows.length ===
+                      0
+                  }
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#003580] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-[#002b68] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingMode ===
+                  'publish'
+                    ? 'Publishing...'
+                    : 'Save & Publish'}
+                </button>
+              </>
+            )}
           </div>
         </div>
+      </div>
+
+      {/* =====================================================
+          SAVED RESULTS
+      ===================================================== */}
+
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-5 py-4">
+          <h2 className="text-lg font-bold text-slate-900">
+            Saved Results
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Edit, publish, unpublish or delete previously saved results.
+          </p>
+        </div>
+
+        {savedResultsLoading ? (
+          <div className="p-6 text-sm text-slate-500">
+            Loading saved results...
+          </div>
+        ) : savedResults.length === 0 ? (
+          <div className="p-8 text-center text-sm text-slate-500">
+            No saved results found.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1050px]">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-5 py-3 text-left text-sm font-semibold text-slate-700">
+                    Result Title
+                  </th>
+
+                  <th className="px-5 py-3 text-left text-sm font-semibold text-slate-700">
+                    Course
+                  </th>
+
+                  <th className="px-5 py-3 text-left text-sm font-semibold text-slate-700">
+                    Date
+                  </th>
+
+                  <th className="px-5 py-3 text-left text-sm font-semibold text-slate-700">
+                    Students
+                  </th>
+
+                  <th className="px-5 py-3 text-left text-sm font-semibold text-slate-700">
+                    Status
+                  </th>
+
+                  <th className="px-5 py-3 text-left text-sm font-semibold text-slate-700">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-slate-100">
+                {savedResults.map(
+                  (result) => {
+                    const loading =
+                      actionLoadingId ===
+                      result.id;
+
+                    return (
+                      <tr
+                        key={
+                          result.id
+                        }
+                        className={[
+                          'hover:bg-slate-50',
+                          editingResultId ===
+                          result.id
+                            ? 'bg-blue-50/60'
+                            : '',
+                        ].join(' ')}
+                      >
+                        {/* RESULT TITLE */}
+
+                        <td className="px-5 py-4">
+                          <div className="font-semibold text-slate-900">
+                            {result.resultTitle ||
+                              '-'}
+                          </div>
+
+                          {editingResultId ===
+                          result.id ? (
+                            <div className="mt-1 text-xs font-semibold text-blue-600">
+                              Currently editing
+                            </div>
+                          ) : null}
+                        </td>
+
+                        {/* COURSE */}
+
+                        <td className="px-5 py-4 text-sm text-slate-700">
+                          {result.course ||
+                            '-'}
+                        </td>
+
+                        {/* DATE */}
+
+                        <td className="px-5 py-4 text-sm text-slate-700">
+                          {formatDate(
+                            result.resultDate
+                          )}
+                        </td>
+
+                        {/* STUDENT COUNT */}
+
+                        <td className="px-5 py-4 text-sm text-slate-700">
+                          {result.studentCount ??
+                            0}
+                        </td>
+
+                        {/* STATUS */}
+
+                        <td className="px-5 py-4">
+                          {result.isPublished ? (
+                            <span className="inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+                              Published
+                            </span>
+                          ) : (
+                            <span className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-700">
+                              Draft
+                            </span>
+                          )}
+                        </td>
+
+                        {/* ACTIONS */}
+
+                        <td className="px-5 py-4">
+                          <div className="flex flex-wrap gap-2">
+                            {/* EDIT */}
+
+                            <button
+                              type="button"
+                              disabled={
+                                loading
+                              }
+                              onClick={() =>
+                                editSavedResult(
+                                  result.id
+                                )
+                              }
+                              className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {loading
+                                ? 'Please wait...'
+                                : 'Edit'}
+                            </button>
+
+                            {/* PUBLISH / UNPUBLISH */}
+
+                            <button
+                              type="button"
+                              disabled={
+                                loading
+                              }
+                              onClick={() =>
+                                togglePublish(
+                                  result
+                                )
+                              }
+                              className={[
+                                'rounded-lg border px-3 py-2 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50',
+                                result.isPublished
+                                  ? 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                                  : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100',
+                              ].join(
+                                ' '
+                              )}
+                            >
+                              {result.isPublished
+                                ? 'Unpublish'
+                                : 'Publish'}
+                            </button>
+
+                            {/* DELETE */}
+
+                            <button
+                              type="button"
+                              disabled={
+                                loading
+                              }
+                              onClick={() =>
+                                deleteSavedResult(
+                                  result
+                                )
+                              }
+                              className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
