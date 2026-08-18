@@ -91,6 +91,7 @@ export default function AdminStudentsPage() {
   const [createError, setCreateError] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [passwordCopied, setPasswordCopied] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingStudent, setEditingStudent] = useState(null);
   const [editForm, setEditForm] = useState({ ...EMPTY_FORM, id: '' });
@@ -502,28 +503,59 @@ export default function AdminStudentsPage() {
                       type={showPassword ? 'text' : 'password'}
                       minLength={8}
                       required
-                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 pr-10 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 pr-16 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((v) => !v)}
-                      className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-slate-400 hover:text-slate-600"
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    >
-                      {showPassword ? (
-                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M2.5 10s3-6 7.5-6 7.5 6 7.5 6-3 6-7.5 6-7.5-6-7.5-6Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-                          <circle cx="10" cy="10" r="2.25" stroke="currentColor" strokeWidth="1.5" />
-                        </svg>
-                      ) : (
-                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M2.5 10s3-6 7.5-6c1.64 0 3.02.5 4.15 1.18M17.5 10s-1.15 2.3-3.35 3.94M6.6 4.9C4.2 6.15 2.5 10 2.5 10M4.2 4.2l11.6 11.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d="M8.1 8.2A2.25 2.25 0 0 0 10 13.25c.5 0 .96-.15 1.34-.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      )}
-                    </button>
+                    <div className="absolute inset-y-0 right-0 flex items-center gap-0.5 pr-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((v) => !v)}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showPassword ? (
+                          <svg width="17" height="17" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M2.5 10s3-6 7.5-6 7.5 6 7.5 6-3 6-7.5 6-7.5-6-7.5-6Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                            <circle cx="10" cy="10" r="2.25" stroke="currentColor" strokeWidth="1.5" />
+                          </svg>
+                        ) : (
+                          <svg width="17" height="17" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M2.5 10s3-6 7.5-6c1.64 0 3.02.5 4.15 1.18M17.5 10s-1.15 2.3-3.35 3.94M6.6 4.9C4.2 6.15 2.5 10 2.5 10M4.2 4.2l11.6 11.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                            <path d="M8.1 8.2A2.25 2.25 0 0 0 10 13.25c.5 0 .96-.15 1.34-.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!form.password) return;
+                          navigator.clipboard
+                            ?.writeText(form.password)
+                            .then(() => {
+                              setPasswordCopied(true);
+                              setTimeout(() => setPasswordCopied(false), 1500);
+                            })
+                            .catch(() => {});
+                        }}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                        aria-label="Copy password"
+                      >
+                        {passwordCopied ? (
+                          <svg width="17" height="17" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M4 10.5l3.5 3.5L16 5.5" stroke="#16a34a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        ) : (
+                          <svg width="17" height="17" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="7" y="7" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+                            <path d="M4.5 12.5V5A1.5 1.5 0 0 1 6 3.5h7.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
                   </div>
-                  <div className="mt-1 text-[11px] text-slate-400">At least 8 characters. The student can change it after logging in.</div>
+                  <div className="mt-1 text-[11px] text-slate-400">
+                    {passwordCopied ? 'Copied!' : 'At least 8 characters. The student can change it after logging in.'}
+                  </div>
                 </div>
 
                 <div className="flex gap-3">
