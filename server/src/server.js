@@ -75,10 +75,7 @@ import {
 } from './routes/studentResults.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
-
-const __dirname = path.dirname(
-  __filename
-);
+const __dirname = path.dirname(__filename);
 
 /* =========================================================
    UPLOAD ROOT
@@ -96,30 +93,15 @@ const uploadRoot = path.resolve(
 
 [
   uploadRoot,
-  path.join(
-    uploadRoot,
-    'recordings'
-  ),
-  path.join(
-    uploadRoot,
-    'knowledgehub'
-  ),
-  path.join(
-    uploadRoot,
-    'materials'
-  ),
-  path.join(
-    uploadRoot,
-    'assignments'
-  ),
+  path.join(uploadRoot, 'recordings'),
+  path.join(uploadRoot, 'knowledgehub'),
+  path.join(uploadRoot, 'materials'),
+  path.join(uploadRoot, 'assignments'),
 ].forEach((dir) => {
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(
-      dir,
-      {
-        recursive: true,
-      }
-    );
+    fs.mkdirSync(dir, {
+      recursive: true,
+    });
   }
 });
 
@@ -131,42 +113,74 @@ export function createServer() {
   const app = express();
 
   /* =======================================================
-     CORS
+     TRUST NGINX / REVERSE PROXY
+  ======================================================= */
+
+  /*
+    IMPORTANT FOR PRODUCTION
+
+    Your application runs behind Nginx.
+
+    Nginx sends:
+    X-Forwarded-Proto: https
+
+    Without trust proxy, Express may think requests use HTTP.
+
+    This can cause generated image/media URLs to become:
+
+    http://iaaccampus.com/...
+
+    instead of:
+
+    https://iaaccampus.com/...
+
+    which browsers may block as mixed content.
+  */
+
+  app.set('trust proxy', 1);
+
+  /* =======================================================
+     CORS CONFIGURATION
   ======================================================= */
 
   const envOrigins = (
     process.env.CLIENT_ORIGIN || ''
   )
     .split(',')
-    .map((value) =>
-      value.trim()
-    )
+    .map((value) => value.trim())
     .filter(Boolean);
 
-  function isAllowedLocalDevOrigin(
-    origin
-  ) {
+  function isAllowedLocalDevOrigin(origin) {
     try {
-      const url = new URL(
-        origin
-      );
+      const url = new URL(origin);
 
       const hostAllowed =
-        url.hostname ===
-          'localhost' ||
-        url.hostname ===
-          '127.0.0.1';
+        url.hostname === 'localhost' ||
+        url.hostname === '127.0.0.1';
 
       const portAllowed =
-        /^517\d$/.test(
-          url.port
-        );
+        /^517\d$/.test(url.port);
 
       return (
-        url.protocol ===
-          'http:' &&
+        url.protocol === 'http:' &&
         hostAllowed &&
         portAllowed
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function isAllowedProductionOrigin(origin) {
+    try {
+      const url = new URL(origin);
+
+      return (
+        url.protocol === 'https:' &&
+        (
+          url.hostname === 'iaaccampus.com' ||
+          url.hostname === 'www.iaaccampus.com'
+        )
       );
     } catch {
       return false;
@@ -180,27 +194,35 @@ export function createServer() {
   app.use(
     helmet({
       crossOriginResourcePolicy: {
-        policy:
-          'cross-origin',
+        policy: 'cross-origin',
       },
+
+      /*
+        Prevent Helmet from accidentally
+        causing upgrade / mixed-content issues
+        during local HTTP development.
+      */
+      contentSecurityPolicy:
+        process.env.NODE_ENV === 'production'
+          ? undefined
+          : false,
     })
   );
 
   /* =======================================================
-     CORS MIDDLEWARE
+     CORS
   ======================================================= */
 
   app.use(
     cors({
-      origin(
-        origin,
-        callback
-      ) {
+      origin(origin, callback) {
         /*
-          Requests from Postman,
-          curl and some server-side
-          requests may not contain
-          an Origin header.
+          Allow requests without Origin header.
+
+          Examples:
+          - curl
+          - Postman
+          - server-to-server
         */
 
         if (!origin) {
@@ -211,37 +233,59 @@ export function createServer() {
         }
 
         /*
-          Production origins from .env
+          Allow explicit production origins.
         */
 
         if (
-          envOrigins.length >
-          0
+          isAllowedProductionOrigin(
+            origin
+          )
         ) {
-          const allowed =
-            envOrigins.includes(
-              origin
-            ) ||
-            isAllowedLocalDevOrigin(
-              origin
-            );
-
           return callback(
             null,
-            allowed
+            true
           );
         }
 
         /*
-          If CLIENT_ORIGIN is not set,
-          allow local Vite development.
+          Allow local development.
         */
 
-        return callback(
-          null,
+        if (
           isAllowedLocalDevOrigin(
             origin
           )
+        ) {
+          return callback(
+            null,
+            true
+          );
+        }
+
+        /*
+          Allow configured CLIENT_ORIGIN values.
+        */
+
+        if (
+          envOrigins.includes(
+            origin
+          )
+        ) {
+          return callback(
+            null,
+            true
+          );
+        }
+
+        /*
+          Reject unknown origins.
+        */
+
+        return callback(
+          new Error(
+            `CORS blocked origin: ${origin}`
+          ),
+          false
         );
       },
 
@@ -260,6 +304,11 @@ export function createServer() {
         'Content-Type',
         'Authorization',
       ],
+
+      exposedHeaders: [
+        'Content-Disposition',
+        'Content-Length',
+      ],
     })
   );
 
@@ -272,18 +321,14 @@ export function createServer() {
   );
 
   /* =======================================================
-     REQUEST BODY SIZE
+     JSON / FORM BODY
   ======================================================= */
 
   /*
-    Your old value was 1mb.
+    Knowledge Hub image uploads use multipart/form-data,
+    so Multer handles the actual image payloads.
 
-    Knowledge Hub uploads can easily exceed
-    that when multiple images are submitted.
-
-    NOTE:
-    multer/file-upload middleware has its own
-    file limits too. We will check that separately.
+    These limits are mainly for normal JSON/form requests.
   */
 
   app.use(
@@ -308,20 +353,17 @@ export function createServer() {
   );
 
   /* =======================================================
-     STATIC UPLOADS
+     STATIC UPLOAD FILES
   ======================================================= */
 
   /*
-    Example:
+    Example stored path:
 
-    file on disk:
     server/uploads/knowledgehub/photo.jpg
 
-    public URL:
-    /uploads/knowledgehub/photo.jpg
+    Public URL:
 
-    production:
-    https://iaaccampus.com/uploads/knowledgehub/photo.jpg
+    /uploads/knowledgehub/photo.jpg
   */
 
   app.use(
@@ -342,6 +384,21 @@ export function createServer() {
             'Cross-Origin-Resource-Policy',
             'cross-origin'
           );
+
+          res.setHeader(
+            'Access-Control-Allow-Origin',
+            '*'
+          );
+
+          if (
+            process.env.NODE_ENV ===
+            'production'
+          ) {
+            res.setHeader(
+              'Cache-Control',
+              'public, max-age=86400'
+            );
+          }
         },
       }
     )
@@ -357,6 +414,12 @@ export function createServer() {
       res.json({
         name: 'lms-api',
         status: 'ok',
+
+        protocol:
+          req.protocol,
+
+        secure:
+          req.secure,
       });
     }
   );
@@ -371,7 +434,7 @@ export function createServer() {
   );
 
   /* =======================================================
-     STUDENT / GENERAL AUTH
+     AUTH
   ======================================================= */
 
   app.use(
@@ -515,6 +578,16 @@ export function createServer() {
      KNOWLEDGE HUB
   ======================================================= */
 
+  /*
+    Includes:
+
+    GET /api/knowledge-hub
+
+    GET /api/knowledge-hub/media/:id/:index
+
+    GET /api/knowledge-hub/download/:id
+  */
+
   app.use(
     '/api/knowledge-hub',
     knowledgeHubRouter
@@ -550,6 +623,13 @@ export function createServer() {
   /* =======================================================
      PROTECTED LMS ROUTES
   ======================================================= */
+
+  /*
+    Keep this near the end because it protects
+    generic /api LMS routes.
+
+    More-specific routes above should be mounted first.
+  */
 
   app.use(
     '/api',
