@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+
 import {
   Image as ImageIcon,
   Plus,
@@ -14,64 +15,6 @@ import {
 } from '../../api/http.js';
 
 /* =========================================================
-   MEDIA URL HELPER
-========================================================= */
-
-function mediaUrl(value, base = '') {
-  if (!value) {
-    return '';
-  }
-
-  const raw = String(value).trim();
-
-  /*
-    Backend may already return:
-
-    https://iaaccampus.com/api/knowledge-hub/media/...
-  */
-  if (
-    raw.startsWith('http://') ||
-    raw.startsWith('https://')
-  ) {
-    return raw;
-  }
-
-  /*
-    Browser-local blob / data URLs.
-  */
-  if (
-    raw.startsWith('blob:') ||
-    raw.startsWith('data:')
-  ) {
-    return raw;
-  }
-
-  /*
-    If backend returns:
-
-    /api/knowledge-hub/media/...
-    /uploads/...
-  */
-  const normalizedPath = raw.startsWith('/')
-    ? raw
-    : `/${raw}`;
-
-  const normalizedBase = String(base || '')
-    .trim()
-    .replace(/\/+$/, '');
-
-  /*
-    When frontend + API use the same domain,
-    relative URLs are preferable.
-  */
-  if (!normalizedBase) {
-    return normalizedPath;
-  }
-
-  return `${normalizedBase}${normalizedPath}`;
-}
-
-/* =========================================================
    FILE LABEL
 ========================================================= */
 
@@ -85,6 +28,36 @@ function fileLabel(files) {
   }
 
   return `${files.length} images selected`;
+}
+
+/* =========================================================
+   BUILD MEDIA URL
+========================================================= */
+
+function buildHubImageUrl(itemId, index, apiBase = '') {
+  if (!itemId && itemId !== 0) {
+    return '';
+  }
+
+  const path =
+    `/api/knowledge-hub/media/${encodeURIComponent(
+      String(itemId)
+    )}/${index}`;
+
+  const base = String(apiBase || '')
+    .trim()
+    .replace(/\/+$/, '');
+
+  /*
+    Same-domain production:
+
+    /api/knowledge-hub/media/...
+  */
+  if (!base) {
+    return path;
+  }
+
+  return `${base}${path}`;
 }
 
 /* =========================================================
@@ -134,29 +107,28 @@ export default function AdminKnowledgeHubPage() {
      LOAD POSTS
   ======================================================= */
 
-  const loadItems = async () => {
+  async function loadItems() {
     setLoading(true);
 
     setListErr('');
 
     try {
-      const data = await apiGet(
-        '/api/admin/knowledge-hub'
+      const data =
+        await apiGet(
+          '/api/admin/knowledge-hub'
+        );
+
+      const nextItems =
+        Array.isArray(
+          data?.items
+        )
+          ? data.items
+          : [];
+
+      setItems(
+        nextItems
       );
 
-      const nextItems = Array.isArray(data?.items)
-        ? data.items
-        : [];
-
-      setItems(nextItems);
-
-      /*
-        Helpful while debugging.
-
-        You should see imagePaths similar to:
-
-        https://iaaccampus.com/api/knowledge-hub/media/...
-      */
       console.log(
         'Knowledge Hub items:',
         nextItems
@@ -169,12 +141,12 @@ export default function AdminKnowledgeHubPage() {
 
       setListErr(
         err?.message ||
-          'Failed to load knowledge hub posts'
+          'Failed to load knowledge hub posts.'
       );
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   /* =======================================================
      INITIAL LOAD
@@ -196,13 +168,20 @@ export default function AdminKnowledgeHubPage() {
         const base =
           await getApiBaseUrl();
 
-        if (!cancelled) {
-          setApiBase(
-            String(base || '')
-              .trim()
-              .replace(/\/+$/, '')
-          );
+        if (cancelled) {
+          return;
         }
+
+        setApiBase(
+          String(
+            base || ''
+          )
+            .trim()
+            .replace(
+              /\/+$/,
+              ''
+            )
+        );
       } catch (err) {
         console.warn(
           'Failed to determine API base URL:',
@@ -223,21 +202,26 @@ export default function AdminKnowledgeHubPage() {
   ======================================================= */
 
   useEffect(() => {
-    const nextUrls = images.map(
-      (file) =>
-        globalThis.URL.createObjectURL(
-          file
-        )
+    const nextUrls =
+      images.map(
+        (file) =>
+          globalThis.URL.createObjectURL(
+            file
+          )
+      );
+
+    setPreviewUrls(
+      nextUrls
     );
 
-    setPreviewUrls(nextUrls);
-
     return () => {
-      nextUrls.forEach((url) => {
-        globalThis.URL.revokeObjectURL(
-          url
-        );
-      });
+      nextUrls.forEach(
+        (url) => {
+          globalThis.URL.revokeObjectURL(
+            url
+          );
+        }
+      );
     };
   }, [images]);
 
@@ -245,7 +229,7 @@ export default function AdminKnowledgeHubPage() {
      RESET FORM
   ======================================================= */
 
-  const resetForm = () => {
+  function resetForm() {
     setTitle('');
 
     setDescription('');
@@ -254,19 +238,26 @@ export default function AdminKnowledgeHubPage() {
 
     setFormErr('');
 
-    if (fileRef.current) {
-      fileRef.current.value = '';
+    if (
+      fileRef.current
+    ) {
+      fileRef.current.value =
+        '';
     }
-  };
+  }
 
   /* =======================================================
      IMAGE SELECT
   ======================================================= */
 
-  const onImageChange = (event) => {
-    const selectedFiles = Array.from(
-      event.target.files || []
-    );
+  function onImageChange(
+    event
+  ) {
+    const selectedFiles =
+      Array.from(
+        event.target.files ||
+          []
+      );
 
     const allowedFiles =
       selectedFiles.filter(
@@ -287,21 +278,30 @@ export default function AdminKnowledgeHubPage() {
       setFormErr('');
     }
 
+    if (
+      allowedFiles.length >
+      6
+    ) {
+      setFormErr(
+        'Maximum 6 images are allowed.'
+      );
+    }
+
     setImages(
       allowedFiles.slice(
         0,
         6
       )
     );
-  };
+  }
 
   /* =======================================================
      CREATE POST
   ======================================================= */
 
-  const onCreate = async (
+  async function onCreate(
     event
-  ) => {
+  ) {
     event.preventDefault();
 
     if (!title.trim()) {
@@ -312,7 +312,9 @@ export default function AdminKnowledgeHubPage() {
       return;
     }
 
-    if (!description.trim()) {
+    if (
+      !description.trim()
+    ) {
       setFormErr(
         'Description is required.'
       );
@@ -320,7 +322,9 @@ export default function AdminKnowledgeHubPage() {
       return;
     }
 
-    if (images.length === 0) {
+    if (
+      images.length === 0
+    ) {
       setFormErr(
         'Please add at least one image.'
       );
@@ -328,7 +332,9 @@ export default function AdminKnowledgeHubPage() {
       return;
     }
 
-    if (images.length > 6) {
+    if (
+      images.length > 6
+    ) {
       setFormErr(
         'Maximum 6 images are allowed.'
       );
@@ -344,16 +350,22 @@ export default function AdminKnowledgeHubPage() {
       let apiOrigin =
         apiBase;
 
-      if (!apiOrigin) {
+      if (
+        !apiOrigin
+      ) {
         apiOrigin =
           await getApiBaseUrl();
       }
 
-      apiOrigin = String(
-        apiOrigin || ''
-      )
-        .trim()
-        .replace(/\/+$/, '');
+      apiOrigin =
+        String(
+          apiOrigin || ''
+        )
+          .trim()
+          .replace(
+            /\/+$/,
+            ''
+          );
 
       const formData =
         new globalThis.FormData();
@@ -397,19 +409,17 @@ export default function AdminKnowledgeHubPage() {
         }
       );
 
-      /*
-        If apiOrigin is empty in production,
-        use the current domain.
-      */
-      const endpoint = apiOrigin
-        ? `${apiOrigin}/api/admin/knowledge-hub`
-        : '/api/admin/knowledge-hub';
+      const endpoint =
+        apiOrigin
+          ? `${apiOrigin}/api/admin/knowledge-hub`
+          : '/api/admin/knowledge-hub';
 
       const response =
         await fetch(
           endpoint,
           {
-            method: 'POST',
+            method:
+              'POST',
 
             body:
               formData,
@@ -419,7 +429,9 @@ export default function AdminKnowledgeHubPage() {
           }
         );
 
-      if (!response.ok) {
+      if (
+        !response.ok
+      ) {
         const data =
           await response
             .json()
@@ -435,7 +447,9 @@ export default function AdminKnowledgeHubPage() {
 
       resetForm();
 
-      setShowForm(false);
+      setShowForm(
+        false
+      );
 
       await loadItems();
     } catch (err) {
@@ -446,25 +460,26 @@ export default function AdminKnowledgeHubPage() {
 
       setFormErr(
         err?.message ||
-          'Failed to publish post'
+          'Failed to publish post.'
       );
     } finally {
       setSaving(false);
     }
-  };
+  }
 
   /* =======================================================
      DELETE POST
   ======================================================= */
 
-  const onDelete = async (
+  async function onDelete(
     id
-  ) => {
-    if (
-      !window.confirm(
+  ) {
+    const confirmed =
+      window.confirm(
         'Delete this knowledge hub post?'
-      )
-    ) {
+      );
+
+    if (!confirmed) {
       return;
     }
 
@@ -477,13 +492,13 @@ export default function AdminKnowledgeHubPage() {
     } catch (err) {
       globalThis.alert(
         err?.message ||
-          'Failed to delete post'
+          'Failed to delete post.'
       );
     }
-  };
+  }
 
   /* =======================================================
-     INPUT STYLING
+     INPUT STYLE
   ======================================================= */
 
   const inputCls =
@@ -518,7 +533,9 @@ export default function AdminKnowledgeHubPage() {
           <button
             type="button"
             onClick={() => {
-              if (showForm) {
+              if (
+                showForm
+              ) {
                 resetForm();
               }
 
@@ -531,12 +548,18 @@ export default function AdminKnowledgeHubPage() {
           >
             {showForm ? (
               <>
-                <X size={14} />
+                <X
+                  size={14}
+                />
+
                 Close form
               </>
             ) : (
               <>
-                <Plus size={14} />
+                <Plus
+                  size={14}
+                />
+
                 New post
               </>
             )}
@@ -570,10 +593,16 @@ export default function AdminKnowledgeHubPage() {
               </label>
 
               <input
-                value={title}
-                onChange={(event) =>
+                value={
+                  title
+                }
+                onChange={(
+                  event
+                ) =>
                   setTitle(
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
                 }
                 className={`mt-1 ${inputCls}`}
@@ -597,7 +626,8 @@ export default function AdminKnowledgeHubPage() {
                   event
                 ) =>
                   setDescription(
-                    event.target
+                    event
+                      .target
                       .value
                   )
                 }
@@ -615,7 +645,9 @@ export default function AdminKnowledgeHubPage() {
               </label>
 
               <input
-                ref={fileRef}
+                ref={
+                  fileRef
+                }
                 type="file"
                 accept=".jpg,.jpeg,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif"
                 multiple
@@ -636,7 +668,7 @@ export default function AdminKnowledgeHubPage() {
               </p>
             </div>
 
-            {/* PREVIEW */}
+            {/* PREVIEWS */}
 
             {previewUrls.length >
             0 ? (
@@ -647,11 +679,15 @@ export default function AdminKnowledgeHubPage() {
                     index
                   ) => (
                     <div
-                      key={url}
+                      key={
+                        url
+                      }
                       className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"
                     >
                       <img
-                        src={url}
+                        src={
+                          url
+                        }
                         alt={
                           images[
                             index
@@ -667,7 +703,7 @@ export default function AdminKnowledgeHubPage() {
               </div>
             ) : null}
 
-            {/* BUTTONS */}
+            {/* ACTIONS */}
 
             <div className="flex items-center gap-3 md:col-span-2">
               <button
@@ -678,9 +714,7 @@ export default function AdminKnowledgeHubPage() {
                 className="inline-flex items-center gap-2 rounded-xl bg-sky-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sky-800 disabled:opacity-60"
               >
                 <Upload
-                  size={
-                    14
-                  }
+                  size={14}
                 />
 
                 {saving
@@ -738,7 +772,7 @@ export default function AdminKnowledgeHubPage() {
           </button>
         </div>
 
-        {/* LIST ERROR */}
+        {/* ERROR */}
 
         {listErr ? (
           <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
@@ -761,14 +795,39 @@ export default function AdminKnowledgeHubPage() {
           <div className="grid gap-4 lg:grid-cols-2">
             {items.map(
               (item) => {
-                const itemImages =
+                /*
+                  IMPORTANT:
+
+                  We do not use item.imagePaths as the final URL.
+
+                  We only use its length so that we know
+                  how many images belong to the item.
+
+                  The real src is generated from:
+
+                  /api/knowledge-hub/media/:id/:index
+                */
+
+                const imageCount =
                   Array.isArray(
-                    item.imagePaths
+                    item.imageAssetIds
                   )
-                    ? item.imagePaths.filter(
-                        Boolean
-                      )
-                    : [];
+                    ? item.imageAssetIds.length
+                    : Array.isArray(
+                          item.imagePaths
+                        )
+                      ? item.imagePaths.length
+                      : Array.isArray(
+                            item.imageNames
+                          )
+                        ? item.imageNames.length
+                        : 0;
+
+                const visibleImageCount =
+                  Math.min(
+                    imageCount,
+                    4
+                  );
 
                 return (
                   <article
@@ -779,13 +838,13 @@ export default function AdminKnowledgeHubPage() {
                   >
                     {/* IMAGES */}
 
-                    {itemImages.length >
+                    {imageCount >
                     0 ? (
                       <div
                         className={[
                           'grid gap-0.5 bg-slate-200',
 
-                          itemImages.length ===
+                          imageCount ===
                           1
                             ? 'grid-cols-1'
                             : 'grid-cols-2',
@@ -793,79 +852,84 @@ export default function AdminKnowledgeHubPage() {
                           ' '
                         )}
                       >
-                        {itemImages
-                          .slice(
-                            0,
-                            4
-                          )
-                          .map(
-                            (
-                              imagePath,
-                              index
-                            ) => {
-                              const src =
-                                mediaUrl(
-                                  imagePath,
-                                  apiBase
-                                );
-
-                              return (
-                                <div
-                                  key={`${item.id}-${index}`}
-                                  className="relative overflow-hidden bg-slate-100"
-                                >
-                                  <img
-                                    src={
-                                      src
-                                    }
-                                    alt={
-                                      item
-                                        .imageNames?.[
-                                        index
-                                      ] ||
-                                      `${item.title} ${index + 1}`
-                                    }
-                                    loading="lazy"
-                                    decoding="async"
-                                    className={
-                                      itemImages.length ===
-                                      1
-                                        ? 'h-72 w-full object-cover'
-                                        : 'h-44 w-full object-cover'
-                                    }
-                                    onError={(
-                                      event
-                                    ) => {
-                                      console.error(
-                                        'Knowledge Hub image failed:',
-                                        {
-                                          itemId:
-                                            item.id,
-                                          imagePath,
-                                          finalUrl:
-                                            src,
-                                        }
-                                      );
-
-                                      event.currentTarget.style.display =
-                                        'none';
-                                    }}
-                                  />
-
-                                  {index ===
-                                    3 &&
-                                  itemImages.length >
-                                    4 ? (
-                                    <div className="absolute inset-0 flex items-center justify-center bg-black/45 text-lg font-bold text-white">
-                                      +
-                                      {itemImages.length -
-                                        4}
-                                    </div>
-                                  ) : null}
-                                </div>
+                        {Array.from(
+                          {
+                            length:
+                              visibleImageCount,
+                          },
+                          (
+                            _,
+                            index
+                          ) => {
+                            const src =
+                              buildHubImageUrl(
+                                item.id,
+                                index,
+                                apiBase
                               );
-                            }
-                          )}
+
+                            return (
+                              <div
+                                key={`${item.id}-${index}`}
+                                className="relative min-h-40 overflow-hidden bg-slate-100"
+                              >
+                                <img
+                                  src={
+                                    src
+                                  }
+                                  alt={
+                                    item
+                                      .imageNames?.[
+                                      index
+                                    ] ||
+                                    `${item.title || 'Knowledge Hub'} image ${index + 1}`
+                                  }
+                                  className={
+                                    imageCount ===
+                                    1
+                                      ? 'h-72 w-full object-cover'
+                                      : 'h-44 w-full object-cover'
+                                  }
+                                  onLoad={() => {
+                                    console.log(
+                                      'Knowledge Hub image loaded:',
+                                      src
+                                    );
+                                  }}
+                                  onError={(
+                                    event
+                                  ) => {
+                                    console.error(
+                                      'Knowledge Hub image failed:',
+                                      {
+                                        itemId:
+                                          item.id,
+
+                                        index,
+
+                                        src,
+                                      }
+                                    );
+
+                                    event.currentTarget.style.opacity =
+                                      '0';
+                                  }}
+                                />
+
+                                {index ===
+                                  3 &&
+                                imageCount >
+                                  4 ? (
+                                  <div className="absolute inset-0 flex items-center justify-center bg-black/45 text-xl font-bold text-white">
+                                    +
+                                    {imageCount -
+                                      4}
+                                  </div>
+                                ) : null}
+                              </div>
+                            );
+                          }
+                        )}
                       </div>
                     ) : (
                       <div className="flex h-40 items-center justify-center bg-slate-100 text-slate-400">
@@ -904,9 +968,7 @@ export default function AdminKnowledgeHubPage() {
                           className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-rose-600 hover:bg-rose-100"
                         >
                           <Trash2
-                            size={
-                              14
-                            }
+                            size={14}
                           />
                         </button>
                       </div>
@@ -921,14 +983,14 @@ export default function AdminKnowledgeHubPage() {
                           all students
                         </span>
 
-                        {itemImages.length >
+                        {imageCount >
                         0 ? (
                           <span className="rounded-full bg-white px-2.5 py-1">
                             {
-                              itemImages.length
+                              imageCount
                             }{' '}
                             image
-                            {itemImages.length !==
+                            {imageCount !==
                             1
                               ? 's'
                               : ''}
