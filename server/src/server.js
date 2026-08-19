@@ -66,24 +66,28 @@ import {
   studentAssignmentsRouter,
 } from './routes/assignments.routes.js';
 
-/* =========================================================
-   ADMIN RESULTS
-========================================================= */
-
 import {
   resultsRouter,
 } from './routes/results.routes.js';
-
-/* =========================================================
-   STUDENT RESULTS
-========================================================= */
 
 import {
   studentResultsRouter,
 } from './routes/studentResults.routes.js';
 
+const __filename = fileURLToPath(import.meta.url);
+
 const __dirname = path.dirname(
-  fileURLToPath(import.meta.url)
+  __filename
+);
+
+/* =========================================================
+   UPLOAD ROOT
+========================================================= */
+
+const uploadRoot = path.resolve(
+  __dirname,
+  '..',
+  'uploads'
 );
 
 /* =========================================================
@@ -91,21 +95,31 @@ const __dirname = path.dirname(
 ========================================================= */
 
 [
-  'uploads/recordings',
-  'uploads/knowledgehub',
-  'uploads/materials',
-  'uploads/assignments',
+  uploadRoot,
+  path.join(
+    uploadRoot,
+    'recordings'
+  ),
+  path.join(
+    uploadRoot,
+    'knowledgehub'
+  ),
+  path.join(
+    uploadRoot,
+    'materials'
+  ),
+  path.join(
+    uploadRoot,
+    'assignments'
+  ),
 ].forEach((dir) => {
-  const abs = path.resolve(
-    __dirname,
-    '..',
-    dir
-  );
-
-  if (!fs.existsSync(abs)) {
-    fs.mkdirSync(abs, {
-      recursive: true,
-    });
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(
+      dir,
+      {
+        recursive: true,
+      }
+    );
   }
 });
 
@@ -124,22 +138,33 @@ export function createServer() {
     process.env.CLIENT_ORIGIN || ''
   )
     .split(',')
-    .map((value) => value.trim())
+    .map((value) =>
+      value.trim()
+    )
     .filter(Boolean);
 
-  function isAllowedLocalDevOrigin(origin) {
+  function isAllowedLocalDevOrigin(
+    origin
+  ) {
     try {
-      const url = new URL(origin);
+      const url = new URL(
+        origin
+      );
 
       const hostAllowed =
-        url.hostname === 'localhost' ||
-        url.hostname === '127.0.0.1';
+        url.hostname ===
+          'localhost' ||
+        url.hostname ===
+          '127.0.0.1';
 
       const portAllowed =
-        /^517\d$/.test(url.port);
+        /^517\d$/.test(
+          url.port
+        );
 
       return (
-        url.protocol === 'http:' &&
+        url.protocol ===
+          'http:' &&
         hostAllowed &&
         portAllowed
       );
@@ -155,22 +180,51 @@ export function createServer() {
   app.use(
     helmet({
       crossOriginResourcePolicy: {
-        policy: 'cross-origin',
+        policy:
+          'cross-origin',
       },
     })
   );
 
+  /* =======================================================
+     CORS MIDDLEWARE
+  ======================================================= */
+
   app.use(
     cors({
-      origin(origin, callback) {
+      origin(
+        origin,
+        callback
+      ) {
+        /*
+          Requests from Postman,
+          curl and some server-side
+          requests may not contain
+          an Origin header.
+        */
+
         if (!origin) {
-          return callback(null, true);
+          return callback(
+            null,
+            true
+          );
         }
 
-        if (envOrigins.length > 0) {
+        /*
+          Production origins from .env
+        */
+
+        if (
+          envOrigins.length >
+          0
+        ) {
           const allowed =
-            envOrigins.includes(origin) ||
-            isAllowedLocalDevOrigin(origin);
+            envOrigins.includes(
+              origin
+            ) ||
+            isAllowedLocalDevOrigin(
+              origin
+            );
 
           return callback(
             null,
@@ -178,46 +232,118 @@ export function createServer() {
           );
         }
 
+        /*
+          If CLIENT_ORIGIN is not set,
+          allow local Vite development.
+        */
+
         return callback(
           null,
-          isAllowedLocalDevOrigin(origin)
+          isAllowedLocalDevOrigin(
+            origin
+          )
         );
       },
 
       credentials: true,
+
+      methods: [
+        'GET',
+        'POST',
+        'PUT',
+        'PATCH',
+        'DELETE',
+        'OPTIONS',
+      ],
+
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+      ],
     })
   );
 
   /* =======================================================
-     COMMON MIDDLEWARE
+     REQUEST LOGGING
   ======================================================= */
 
   app.use(
     morgan('dev')
   );
 
+  /* =======================================================
+     REQUEST BODY SIZE
+  ======================================================= */
+
+  /*
+    Your old value was 1mb.
+
+    Knowledge Hub uploads can easily exceed
+    that when multiple images are submitted.
+
+    NOTE:
+    multer/file-upload middleware has its own
+    file limits too. We will check that separately.
+  */
+
   app.use(
     express.json({
-      limit: '1mb',
+      limit: '30mb',
     })
   );
+
+  app.use(
+    express.urlencoded({
+      extended: true,
+      limit: '30mb',
+    })
+  );
+
+  /* =======================================================
+     COOKIES
+  ======================================================= */
 
   app.use(
     cookieParser()
   );
 
   /* =======================================================
-     STATIC FILES
+     STATIC UPLOADS
   ======================================================= */
+
+  /*
+    Example:
+
+    file on disk:
+    server/uploads/knowledgehub/photo.jpg
+
+    public URL:
+    /uploads/knowledgehub/photo.jpg
+
+    production:
+    https://iaaccampus.com/uploads/knowledgehub/photo.jpg
+  */
 
   app.use(
     '/uploads',
     express.static(
-      path.resolve(
-        __dirname,
-        '..',
-        'uploads'
-      )
+      uploadRoot,
+      {
+        fallthrough: true,
+
+        maxAge:
+          process.env.NODE_ENV ===
+          'production'
+            ? '1d'
+            : 0,
+
+        setHeaders(res) {
+          res.setHeader(
+            'Cross-Origin-Resource-Policy',
+            'cross-origin'
+          );
+        },
+      }
     )
   );
 
@@ -285,18 +411,6 @@ export function createServer() {
   /* =======================================================
      STUDENT RESULTS
   ======================================================= */
-
-  /*
-    Student endpoint:
-
-    GET /api/student/results
-
-    Authentication is handled inside
-    studentResultsRouter using:
-
-    requireAuth
-    requireStudent
-  */
 
   app.use(
     '/api/student/results',
@@ -380,7 +494,7 @@ export function createServer() {
   );
 
   /* =======================================================
-     STUDENT / LECTURER MODULES
+     STUDENT / LECTURER SCHEDULE
   ======================================================= */
 
   app.use(
@@ -388,15 +502,27 @@ export function createServer() {
     scheduleRouter
   );
 
+  /* =======================================================
+     STUDENT / LECTURER RECORDINGS
+  ======================================================= */
+
   app.use(
     '/api/recordings',
     recordingsRouter
   );
 
+  /* =======================================================
+     KNOWLEDGE HUB
+  ======================================================= */
+
   app.use(
     '/api/knowledge-hub',
     knowledgeHubRouter
   );
+
+  /* =======================================================
+     STUDENT ASSIGNMENTS
+  ======================================================= */
 
   app.use(
     '/api/student/assignments',

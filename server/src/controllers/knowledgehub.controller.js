@@ -1,8 +1,10 @@
 import fs from 'fs';
 import path from 'path';
+
 import { Admin } from '../models/Admin.js';
 import { KnowledgeHubItem } from '../models/KnowledgeHubItem.js';
 import { Student } from '../models/Student.js';
+
 import {
   deleteFileAsset,
   deleteImageAsset,
@@ -13,6 +15,10 @@ import {
   storeFileUpload,
   storeImageUpload,
 } from '../services/imageStore.service.js';
+
+/* =========================================================
+   CONSTANTS
+========================================================= */
 
 const ALLOWED_FILE_MIMES = new Set([
   'application/pdf',
@@ -28,423 +34,2235 @@ const ALLOWED_FILE_MIMES = new Set([
   'application/octet-stream',
   'application/x-pdf',
 ]);
-const ALLOWED_FILE_EXTS = new Set(['.pdf', '.docx', '.pptx', '.xlsx', '.zip', '.doc', '.xls', '.ppt', '.txt']);
+
+const ALLOWED_FILE_EXTS = new Set([
+  '.pdf',
+  '.docx',
+  '.pptx',
+  '.xlsx',
+  '.zip',
+  '.doc',
+  '.xls',
+  '.ppt',
+  '.txt',
+]);
+
+const ALLOWED_IMAGE_MIMES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]);
+
+const ALLOWED_IMAGE_EXTS = new Set([
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.webp',
+  '.gif',
+]);
+
+const VALID_RESOURCE_TYPES = new Set([
+  'file',
+  'link',
+  'video',
+  'note',
+  'gallery',
+]);
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function normalizeId(value) {
+  if (value == null) {
+    return '';
+  }
+
+  return String(value).trim();
+}
+
+function safeStr(value, max = 300) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  return value
+    .trim()
+    .slice(0, max);
+}
+
+function isValidUrl(value) {
+  try {
+    const url = new URL(value);
+
+    return (
+      url.protocol === 'https:' ||
+      url.protocol === 'http:'
+    );
+  } catch {
+    return false;
+  }
+}
 
 function isPdfLike(file) {
-  const extension = path.extname(String(file?.originalname || '')).toLowerCase();
+  const extension = path
+    .extname(
+      String(
+        file?.originalname || ''
+      )
+    )
+    .toLowerCase();
+
   return extension === '.pdf';
 }
-const ALLOWED_IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
-const ALLOWED_IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
 
-function normalizeId(v) { return v == null ? '' : String(v).trim(); }
-function safeStr(v, max = 300) {
-  if (typeof v !== 'string') return '';
-  return v.trim().slice(0, max);
-}
-function isValidUrl(url) {
-  try {
-    const u = new URL(url);
-    return u.protocol === 'https:' || u.protocol === 'http:';
-  } catch { return false; }
+function isAllowedFile(file) {
+  if (!file) {
+    return false;
+  }
+
+  const extension = path
+    .extname(
+      String(
+        file.originalname || ''
+      )
+    )
+    .toLowerCase();
+
+  const mimeAllowed =
+    ALLOWED_FILE_MIMES.has(
+      file.mimetype
+    ) ||
+    isPdfLike(file);
+
+  const extensionAllowed =
+    ALLOWED_FILE_EXTS.has(
+      extension
+    );
+
+  return (
+    mimeAllowed &&
+    extensionAllowed
+  );
 }
 
-function isAbsoluteUrl(value) {
-  return /^https?:\/\//i.test(String(value || ''));
+function isAllowedImage(file) {
+  if (!file) {
+    return false;
+  }
+
+  const extension = path
+    .extname(
+      String(
+        file.originalname || ''
+      )
+    )
+    .toLowerCase();
+
+  return (
+    ALLOWED_IMAGE_MIMES.has(
+      file.mimetype
+    ) &&
+    ALLOWED_IMAGE_EXTS.has(
+      extension
+    )
+  );
 }
 
-function buildAbsoluteUrl(req, value) {
-  if (!value) return '';
-  if (isAbsoluteUrl(value)) return String(value);
-  return `${req.protocol}://${req.get('host')}/${String(value).replace(/^\/+/, '')}`;
+/* =========================================================
+   PUBLIC URL HELPERS
+
+   IMPORTANT:
+
+   We intentionally return SAME-ORIGIN relative URLs.
+
+   GOOD:
+   /api/knowledge-hub/media/123/0
+
+   BAD:
+   http://iaaccampus.com/api/...
+
+   Relative URLs avoid HTTPS/mixed-content problems behind Nginx.
+========================================================= */
+
+function normalizePublicPath(value) {
+  if (!value) {
+    return '';
+  }
+
+  const stringValue =
+    String(value).trim();
+
+  if (!stringValue) {
+    return '';
+  }
+
+  /*
+    Existing absolute URL.
+  */
+
+  if (
+    /^https?:\/\//i.test(
+      stringValue
+    )
+  ) {
+    try {
+      const url =
+        new URL(
+          stringValue
+        );
+
+      return `${url.pathname}${url.search || ''}`;
+    } catch {
+      return stringValue;
+    }
+  }
+
+  /*
+    Ensure leading slash.
+  */
+
+  return `/${stringValue.replace(/^\/+/, '')}`;
 }
 
-function toItem(d, req) {
-  const imagePaths = Array.isArray(d.imageAssetIds) && d.imageAssetIds.length > 0
-    ? d.imageAssetIds.map((_, index) => buildAbsoluteUrl(req, `api/knowledge-hub/media/${String(d._id)}/${index}`))
-    : (Array.isArray(d.imagePaths) ? d.imagePaths.map((value) => buildAbsoluteUrl(req, value)) : []);
+/* =========================================================
+   LEGACY FILE PATH RESOLUTION
+========================================================= */
+
+function resolveLegacyFilePath(
+  storedPath
+) {
+  if (!storedPath) {
+    return '';
+  }
+
+  const raw =
+    String(
+      storedPath
+    ).trim();
+
+  if (!raw) {
+    return '';
+  }
+
+  /*
+    Already absolute filesystem path.
+  */
+
+  if (
+    path.isAbsolute(raw) &&
+    fs.existsSync(raw)
+  ) {
+    return raw;
+  }
+
+  /*
+    Try relative to process cwd.
+  */
+
+  const fromCwd =
+    path.resolve(
+      process.cwd(),
+      raw
+    );
+
+  if (
+    fs.existsSync(
+      fromCwd
+    )
+  ) {
+    return fromCwd;
+  }
+
+  /*
+    Handle public-style value:
+
+    /uploads/knowledgehub/photo.jpg
+  */
+
+  const normalized =
+    raw
+      .replace(/^\/+/, '');
+
+  const serverRelative =
+    path.resolve(
+      process.cwd(),
+      normalized
+    );
+
+  if (
+    fs.existsSync(
+      serverRelative
+    )
+  ) {
+    return serverRelative;
+  }
+
+  return '';
+}
+
+/* =========================================================
+   RESPONSE MAPPER
+========================================================= */
+
+function toItem(document) {
+  const id =
+    String(
+      document._id
+    );
+
+  let imagePaths = [];
+
+  /*
+    New GridFS image storage.
+  */
+
+  if (
+    Array.isArray(
+      document.imageAssetIds
+    ) &&
+    document.imageAssetIds.length >
+      0
+  ) {
+    imagePaths =
+      document.imageAssetIds.map(
+        (_, index) =>
+          `/api/knowledge-hub/media/${encodeURIComponent(
+            id
+          )}/${index}`
+      );
+  }
+
+  /*
+    Legacy image storage.
+  */
+
+  else if (
+    Array.isArray(
+      document.imagePaths
+    )
+  ) {
+    imagePaths =
+      document.imagePaths
+        .map(
+          normalizePublicPath
+        )
+        .filter(Boolean);
+  }
 
   return {
-    id: String(d._id),
-    branchId: d.branchId,
-    intakeId: d.intakeId,
-    batchId:  d.batchId,
-    resourceType: d.resourceType,
-    title:       d.title,
-    description: d.description || '',
-    hasFile:    Boolean(d.filePath),
-    fileName:   d.fileName || '',
-    fileSize:   d.fileSize || 0,
-    downloadUrl: d.filePath ? buildAbsoluteUrl(req, `api/knowledge-hub/download/${String(d._id)}`) : '',
+    id,
+
+    branchId:
+      document.branchId ||
+      '',
+
+    intakeId:
+      document.intakeId ||
+      '',
+
+    batchId:
+      document.batchId ||
+      '',
+
+    resourceType:
+      document.resourceType ||
+      '',
+
+    title:
+      document.title ||
+      '',
+
+    description:
+      document.description ||
+      '',
+
+    hasFile:
+      Boolean(
+        document.fileAssetId ||
+        document.filePath
+      ),
+
+    fileName:
+      document.fileName ||
+      '',
+
+    fileSize:
+      Number(
+        document.fileSize ||
+        0
+      ),
+
+    fileMime:
+      document.fileMime ||
+      '',
+
+    downloadUrl:
+      document.fileAssetId ||
+      document.filePath
+        ? `/api/knowledge-hub/download/${encodeURIComponent(
+            id
+          )}`
+        : '',
+
     imagePaths,
-    imageNames: Array.isArray(d.imageNames) ? d.imageNames : [],
-    contentUrl: d.contentUrl || '',
-    textContent: d.textContent || '',
-    addedBy:     d.addedBy,
-    addedByName: d.addedByName,
-    addedByRole: d.addedByRole,
-    createdAt:  d.createdAt,
+
+    imageNames:
+      Array.isArray(
+        document.imageNames
+      )
+        ? document.imageNames
+        : [],
+
+    contentUrl:
+      document.contentUrl ||
+      '',
+
+    textContent:
+      document.textContent ||
+      '',
+
+    addedBy:
+      document.addedBy ||
+      '',
+
+    addedByName:
+      document.addedByName ||
+      '',
+
+    addedByRole:
+      document.addedByRole ||
+      '',
+
+    createdAt:
+      document.createdAt,
+
+    updatedAt:
+      document.updatedAt,
   };
 }
 
-function buildVisibilityFilter(user) {
+/* =========================================================
+   VISIBILITY FILTER
+========================================================= */
+
+function buildVisibilityFilter(
+  user
+) {
   const filter = {};
-  if (user?.batchId) filter.batchId = normalizeId(user.batchId);
-  if (user?.intakeId) filter.intakeId = normalizeId(user.intakeId);
-  if (user?.branchId) filter.branchId = normalizeId(user.branchId);
+
+  if (
+    user?.branchId
+  ) {
+    filter.branchId =
+      normalizeId(
+        user.branchId
+      );
+  }
+
+  if (
+    user?.intakeId
+  ) {
+    filter.intakeId =
+      normalizeId(
+        user.intakeId
+      );
+  }
+
+  if (
+    user?.batchId
+  ) {
+    filter.batchId =
+      normalizeId(
+        user.batchId
+      );
+  }
+
   return filter;
 }
 
-function getUploadedFiles(req, fieldName) {
-  const files = req.files;
-  if (!files || Array.isArray(files)) return [];
-  const value = files[fieldName];
-  return Array.isArray(value) ? value : value ? [value] : [];
+/* =========================================================
+   MULTER HELPERS
+========================================================= */
+
+function getUploadedFiles(
+  req,
+  fieldName
+) {
+  const files =
+    req.files;
+
+  if (!files) {
+    return [];
+  }
+
+  /*
+    upload.array(...)
+  */
+
+  if (
+    Array.isArray(files)
+  ) {
+    return files;
+  }
+
+  /*
+    upload.fields(...)
+  */
+
+  const value =
+    files[fieldName];
+
+  if (
+    Array.isArray(value)
+  ) {
+    return value;
+  }
+
+  return value
+    ? [value]
+    : [];
 }
 
-function removeUploadedFiles(files) {
-  for (const file of files) {
-    if (file?.path && fs.existsSync(file.path)) {
-      fs.unlinkSync(file.path);
+function removeUploadedFiles(
+  files
+) {
+  for (
+    const file of files
+  ) {
+    try {
+      if (
+        file?.path &&
+        fs.existsSync(
+          file.path
+        )
+      ) {
+        fs.unlinkSync(
+          file.path
+        );
+      }
+    } catch (err) {
+      console.warn(
+        '[knowledge-hub] Failed to remove temporary upload:',
+        err?.message ||
+          err
+      );
     }
   }
 }
 
-async function removeStoredKnowledgeHubFiles(item) {
-  if (item?.fileAssetId) {
-    await deleteFileAsset(item.fileAssetId);
+/* =========================================================
+   REMOVE STORED ASSETS
+========================================================= */
+
+async function removeStoredKnowledgeHubFiles(
+  item
+) {
+  /*
+    GridFS main file.
+  */
+
+  if (
+    item?.fileAssetId
+  ) {
+    try {
+      await deleteFileAsset(
+        item.fileAssetId
+      );
+    } catch (err) {
+      console.warn(
+        '[knowledge-hub] Failed to delete file asset:',
+        err?.message ||
+          err
+      );
+    }
   }
 
-  if (Array.isArray(item?.imageAssetIds) && item.imageAssetIds.length > 0) {
-    await Promise.allSettled(item.imageAssetIds.map((assetId) => deleteImageAsset(assetId)));
+  /*
+    GridFS images.
+  */
+
+  if (
+    Array.isArray(
+      item?.imageAssetIds
+    ) &&
+    item.imageAssetIds.length >
+      0
+  ) {
+    await Promise.allSettled(
+      item.imageAssetIds.map(
+        (assetId) =>
+          deleteImageAsset(
+            assetId
+          )
+      )
+    );
   }
 
-  const paths = [item?.filePath, ...(Array.isArray(item?.imagePaths) ? item.imagePaths : [])].filter(Boolean);
-  for (const filePath of paths) {
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+  /*
+    Legacy local files.
+  */
+
+  const legacyPaths = [
+    item?.filePath,
+    ...(
+      Array.isArray(
+        item?.imagePaths
+      )
+        ? item.imagePaths
+        : []
+    ),
+  ].filter(Boolean);
+
+  for (
+    const storedPath of legacyPaths
+  ) {
+    try {
+      const resolved =
+        resolveLegacyFilePath(
+          storedPath
+        );
+
+      if (
+        resolved &&
+        fs.existsSync(
+          resolved
+        )
+      ) {
+        fs.unlinkSync(
+          resolved
+        );
+      }
+    } catch (err) {
+      console.warn(
+        '[knowledge-hub] Failed to remove legacy asset:',
+        err?.message ||
+          err
+      );
     }
   }
 }
 
-async function resolveUserBatch(auth) {
-  if (auth?.role === 'lecturer') {
-    const l = await Admin.findById(auth.sub).lean();
-    return l ? { branchId: l.branchId, intakeId: l.intakeId, batchId: l.batchId, name: l.name, role: 'lecturer', id: String(l._id) } : null;
-  }
-  const s = await Student.findById(auth.sub).lean();
-  return s ? { branchId: s.branchId, intakeId: s.intakeId, batchId: s.batchId, role: 'student', id: String(s._id) } : null;
-}
+/* =========================================================
+   RESOLVE AUTH USER
+========================================================= */
 
-// ─── STUDENT / LECTURER: list items for their batch ──────────────────────────
-export async function listMyHubItems(req, res, next) {
-  try {
-    const user = await resolveUserBatch(req.auth);
-    if (!user) return res.status(401).json({ message: 'Unauthorized' });
-    const visibilityFilter = user.role === 'student' ? {} : buildVisibilityFilter(user);
-    if (user.role !== 'student' && !visibilityFilter.batchId && !visibilityFilter.intakeId && !visibilityFilter.branchId) {
-      return res.json({ items: [] });
+async function resolveUserBatch(
+  auth
+) {
+  if (!auth?.sub) {
+    return null;
+  }
+
+  if (
+    auth.role ===
+    'lecturer'
+  ) {
+    const lecturer =
+      await Admin.findById(
+        auth.sub
+      )
+        .select(
+          '_id name role branchId intakeId batchId'
+        )
+        .lean();
+
+    if (
+      !lecturer ||
+      lecturer.role !==
+        'lecturer'
+    ) {
+      return null;
     }
 
-    const items = await KnowledgeHubItem.find(visibilityFilter)
-      .sort({ createdAt: -1 })
+    return {
+      id:
+        String(
+          lecturer._id
+        ),
+
+      name:
+        lecturer.name ||
+        '',
+
+      role:
+        'lecturer',
+
+      branchId:
+        lecturer.branchId ||
+        '',
+
+      intakeId:
+        lecturer.intakeId ||
+        '',
+
+      batchId:
+        lecturer.batchId ||
+        '',
+    };
+  }
+
+  const student =
+    await Student.findById(
+      auth.sub
+    )
+      .select(
+        '_id fullName branchId intakeId batchId'
+      )
       .lean();
-    res.json({ items: items.map((item) => toItem(item, req)) });
-  } catch (err) { next(err); }
+
+  if (!student) {
+    return null;
+  }
+
+  return {
+    id:
+      String(
+        student._id
+      ),
+
+    name:
+      student.fullName ||
+      '',
+
+    role:
+      'student',
+
+    branchId:
+      student.branchId ||
+      '',
+
+    intakeId:
+      student.intakeId ||
+      '',
+
+    batchId:
+      student.batchId ||
+      '',
+  };
 }
 
-export async function streamHubImage(req, res, next) {
+/* =========================================================
+   STUDENT / LECTURER
+   LIST KNOWLEDGE HUB ITEMS
+========================================================= */
+
+export async function listMyHubItems(
+  req,
+  res,
+  next
+) {
   try {
-    const item = await KnowledgeHubItem.findById(req.params.id)
-      .select('imageAssetIds imagePaths imageNames title')
-      .lean();
-    if (!item) return res.status(404).json({ message: 'Resource not found' });
+    const user =
+      await resolveUserBatch(
+        req.auth
+      );
 
-    const index = Number.parseInt(req.params.index, 10);
-    if (!Number.isInteger(index) || index < 0) {
-      return res.status(400).json({ message: 'Invalid image index' });
+    if (!user) {
+      return res
+        .status(401)
+        .json({
+          message:
+            'Unauthorized',
+        });
     }
 
-    const assetId = Array.isArray(item.imageAssetIds) ? item.imageAssetIds[index] : '';
-    if (assetId) {
-      const asset = await getImageAssetInfo(assetId);
-      if (!asset) return res.status(404).json({ message: 'Image not found' });
+    /*
+      Knowledge Hub posts created by admins are currently
+      intended to be visible to all students.
 
-      const stream = openImageDownloadStream(assetId);
-      if (!stream) return res.status(404).json({ message: 'Image not found' });
+      Student:
+        no filter.
 
-      res.setHeader('Content-Type', asset.contentType || 'application/octet-stream');
-      res.setHeader('Content-Disposition', `inline; filename="${item.imageNames?.[index] || asset.filename || `image-${index + 1}`}"`);
-      stream.on('error', next);
-      stream.pipe(res);
-      return;
+      Lecturer:
+        only matching hierarchy.
+    */
+
+    const visibilityFilter =
+      user.role ===
+      'student'
+        ? {}
+        : buildVisibilityFilter(
+            user
+          );
+
+    if (
+      user.role ===
+        'lecturer' &&
+      !visibilityFilter.branchId &&
+      !visibilityFilter.intakeId &&
+      !visibilityFilter.batchId
+    ) {
+      return res.json({
+        items: [],
+      });
     }
 
-    const legacyPath = Array.isArray(item.imagePaths) ? item.imagePaths[index] : '';
-    if (!legacyPath) return res.status(404).json({ message: 'Image not found' });
+    const items =
+      await KnowledgeHubItem.find(
+        visibilityFilter
+      )
+        .sort({
+          createdAt: -1,
+        })
+        .lean();
 
-    const absPath = path.resolve(legacyPath);
-    if (!fs.existsSync(absPath)) return res.status(404).json({ message: 'Image not found' });
-
-    res.sendFile(absPath);
+    return res.json({
+      items:
+        items.map(
+          toItem
+        ),
+    });
   } catch (err) {
     next(err);
   }
 }
 
-// ─── STUDENT: download a file resource ───────────────────────────────────────
-export async function studentDownloadResource(req, res, next) {
+/* =========================================================
+   STREAM KNOWLEDGE HUB IMAGE
+========================================================= */
+
+export async function streamHubImage(
+  req,
+  res,
+  next
+) {
   try {
-    const student = await Student.findById(req.auth.sub).lean();
-    if (!student) return res.status(401).json({ message: 'Unauthorized' });
+    const {
+      id,
+      index: indexParam,
+    } = req.params;
 
-    const item = await KnowledgeHubItem.findById(req.params.id).lean();
-    if (!item) return res.status(404).json({ message: 'Resource not found' });
+    const item =
+      await KnowledgeHubItem.findById(
+        id
+      )
+        .select(
+          'imageAssetIds imagePaths imageNames title'
+        )
+        .lean();
 
-    // Knowledge Hub is shared across all students, so any authenticated student can download.
-    if (item.fileAssetId) {
-      const asset = await getFileAssetInfo(item.fileAssetId);
-      if (!asset) return res.status(404).json({ message: 'File not found' });
+    if (!item) {
+      return res
+        .status(404)
+        .json({
+          message:
+            'Resource not found',
+        });
+    }
 
-      const stream = openFileDownloadStream(item.fileAssetId);
-      if (!stream) return res.status(404).json({ message: 'File not found' });
+    const index =
+      Number.parseInt(
+        indexParam,
+        10
+      );
 
-      res.setHeader('Content-Type', asset.contentType || item.fileMime || 'application/octet-stream');
-      res.setHeader('Content-Disposition', `attachment; filename="${item.fileName || asset.filename || 'download'}"`);
-      stream.on('error', next);
-      stream.pipe(res);
+    if (
+      !Number.isInteger(
+        index
+      ) ||
+      index < 0
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            'Invalid image index',
+        });
+    }
+
+    /* =====================================================
+       GRIDFS IMAGE
+    ===================================================== */
+
+    const assetId =
+      Array.isArray(
+        item.imageAssetIds
+      )
+        ? item.imageAssetIds[
+            index
+          ]
+        : null;
+
+    if (assetId) {
+      const asset =
+        await getImageAssetInfo(
+          assetId
+        );
+
+      if (!asset) {
+        return res
+          .status(404)
+          .json({
+            message:
+              'Image not found',
+          });
+      }
+
+      const stream =
+        openImageDownloadStream(
+          assetId
+        );
+
+      if (!stream) {
+        return res
+          .status(404)
+          .json({
+            message:
+              'Image not found',
+          });
+      }
+
+      res.setHeader(
+        'Content-Type',
+        asset.contentType ||
+          'application/octet-stream'
+      );
+
+      res.setHeader(
+        'Cache-Control',
+        'public, max-age=3600'
+      );
+
+      res.setHeader(
+        'Content-Disposition',
+        `inline; filename="${(
+          item.imageNames?.[
+            index
+          ] ||
+          asset.filename ||
+          `image-${index + 1}`
+        ).replace(/"/g, '')}"`
+      );
+
+      stream.on(
+        'error',
+        (err) => {
+          if (
+            !res.headersSent
+          ) {
+            next(err);
+          } else {
+            res.destroy(
+              err
+            );
+          }
+        }
+      );
+
+      stream.pipe(
+        res
+      );
+
       return;
     }
 
-    if (!item.filePath) return res.status(404).json({ message: 'No file attached' });
+    /* =====================================================
+       LEGACY IMAGE
+    ===================================================== */
 
-    const absPath = path.resolve(item.filePath);
-    if (!fs.existsSync(absPath)) return res.status(404).json({ message: 'File not found' });
+    const legacyStoredPath =
+      Array.isArray(
+        item.imagePaths
+      )
+        ? item.imagePaths[
+            index
+          ]
+        : '';
 
-    res.download(absPath, item.fileName || 'download');
-  } catch (err) { next(err); }
-}
-
-// ─── LECTURER: add resource ───────────────────────────────────────────────────
-export async function lecturerAddHubItem(req, res, next) {
-  try {
-    const lecturer = await Admin.findById(req.auth.sub).lean();
-    if (!lecturer || lecturer.role !== 'lecturer') return res.status(403).json({ message: 'Forbidden' });
-
-    const { resourceType, title, description, contentUrl, textContent, batchId, intakeId } = req.body || {};
-
-    const validTypes = ['file', 'link', 'video', 'note'];
-    if (!validTypes.includes(resourceType)) {
-      return res.status(400).json({ message: 'Invalid resource type. Use: file, link, video, note' });
-    }
-    if (!safeStr(title)) return res.status(400).json({ message: 'Title is required' });
-
-    const targetBatchId  = normalizeId(batchId)  || normalizeId(lecturer.batchId);
-    const targetIntakeId = normalizeId(intakeId) || normalizeId(lecturer.intakeId);
-    const targetBranchId = normalizeId(lecturer.branchId);
-
-    if (!targetBatchId) return res.status(400).json({ message: 'No batch assigned to your account' });
-
-    if (normalizeId(lecturer.batchId) && targetBatchId !== normalizeId(lecturer.batchId)) {
-      return res.status(403).json({ message: 'You can only add resources for your assigned batch' });
+    if (
+      !legacyStoredPath
+    ) {
+      return res
+        .status(404)
+        .json({
+          message:
+            'Image not found',
+        });
     }
 
-    let filePath = '', fileAssetId = '', fileName = '', fileSize = 0, fileMime = '';
+    const resolvedPath =
+      resolveLegacyFilePath(
+        legacyStoredPath
+      );
 
-    if (resourceType === 'file') {
-      if (!req.file) return res.status(400).json({ message: 'File is required for type "file"' });
-      if (!ALLOWED_FILE_MIMES.has(req.file.mimetype) && !isPdfLike(req.file)) {
-        removeUploadedFiles([req.file]);
-        return res.status(400).json({ message: 'Invalid file type. Only PDF, DOCX, PPTX, XLSX, ZIP allowed.' });
-      }
-      const ext = path.extname(req.file.originalname).toLowerCase();
-      if (!ALLOWED_FILE_EXTS.has(ext)) {
-        removeUploadedFiles([req.file]);
-        return res.status(400).json({ message: 'Invalid file extension.' });
-      }
-      fileAssetId = await storeFileUpload(req.file, {
-        scope: 'knowledge-hub',
-        resourceType,
-        title: safeStr(title),
-        branchId: targetBranchId,
-        intakeId: targetIntakeId,
-        batchId: targetBatchId,
-      });
-      fileName = req.file.originalname;
-      fileSize = req.file.size;
-      fileMime = req.file.mimetype;
-      removeUploadedFiles([req.file]);
-    } else if (resourceType === 'link' || resourceType === 'video') {
-      if (!contentUrl || !isValidUrl(contentUrl)) {
-        return res.status(400).json({ message: 'A valid URL is required for type "link" or "video"' });
-      }
-    } else if (resourceType === 'note') {
-      if (!safeStr(textContent || '', 20000)) {
-        return res.status(400).json({ message: 'Note content is required' });
-      }
+    if (
+      !resolvedPath ||
+      !fs.existsSync(
+        resolvedPath
+      )
+    ) {
+      return res
+        .status(404)
+        .json({
+          message:
+            'Image file no longer exists',
+        });
     }
 
-    const created = await KnowledgeHubItem.create({
-      branchId: targetBranchId,
-      intakeId: targetIntakeId,
-      batchId:  targetBatchId,
-      resourceType,
-      title:       safeStr(title),
-      description: safeStr(description || '', 1000),
-      filePath, fileAssetId, fileName, fileSize, fileMime,
-      contentUrl:  contentUrl ? safeStr(contentUrl, 1000) : '',
-      textContent: textContent ? safeStr(textContent, 20000) : '',
-      addedBy:     String(lecturer._id),
-      addedByName: lecturer.name,
-      addedByRole: 'lecturer',
-    });
+    res.setHeader(
+      'Cache-Control',
+      'public, max-age=3600'
+    );
 
-    res.status(201).json({ item: toItem(created) });
-  } catch (err) { next(err); }
+    return res.sendFile(
+      resolvedPath
+    );
+  } catch (err) {
+    next(err);
+  }
 }
 
-// ─── LECTURER: delete own resource ───────────────────────────────────────────
-export async function lecturerDeleteHubItem(req, res, next) {
-  try {
-    const item = await KnowledgeHubItem.findById(req.params.id).lean();
-    if (!item) return res.status(404).json({ message: 'Resource not found' });
+/* =========================================================
+   STUDENT DOWNLOAD FILE
+========================================================= */
 
-    if (String(item.addedBy) !== String(req.auth.sub)) {
-      return res.status(403).json({ message: 'You can only delete your own resources' });
+export async function studentDownloadResource(
+  req,
+  res,
+  next
+) {
+  try {
+    if (
+      !req.auth?.sub
+    ) {
+      return res
+        .status(401)
+        .json({
+          message:
+            'Unauthorized',
+        });
     }
 
-    await removeStoredKnowledgeHubFiles(item);
-    await KnowledgeHubItem.findByIdAndDelete(req.params.id);
-    res.json({ ok: true });
-  } catch (err) { next(err); }
-}
+    const student =
+      await Student.findById(
+        req.auth.sub
+      )
+        .select(
+          '_id'
+        )
+        .lean();
 
-// ─── ADMIN: list all resources ────────────────────────────────────────────────
-export async function adminListHubItems(req, res, next) {
-  try {
-    const { batchId } = req.query;
-    const filter = {};
-    if (batchId) filter.batchId = normalizeId(batchId);
+    if (!student) {
+      return res
+        .status(401)
+        .json({
+          message:
+            'Unauthorized',
+        });
+    }
 
-    const items = await KnowledgeHubItem.find(filter).sort({ createdAt: -1 }).lean();
-    res.json({ items: items.map((item) => toItem(item, req)) });
-  } catch (err) { next(err); }
-}
+    const item =
+      await KnowledgeHubItem.findById(
+        req.params.id
+      )
+        .lean();
 
-// ─── ADMIN: add resource to any batch ────────────────────────────────────────
-export async function adminAddHubItem(req, res, next) {
-  try {
-    const { resourceType, title, description, contentUrl, textContent, branchId, intakeId, batchId } = req.body || {};
+    if (!item) {
+      return res
+        .status(404)
+        .json({
+          message:
+            'Resource not found',
+        });
+    }
 
-    const validTypes = ['file', 'link', 'video', 'note', 'gallery'];
-    if (!validTypes.includes(resourceType)) return res.status(400).json({ message: 'Invalid resource type' });
-    if (!safeStr(title)) return res.status(400).json({ message: 'Title is required' });
-    if (!normalizeId(branchId)) return res.status(400).json({ message: 'Branch is required' });
-    if (!normalizeId(batchId))  return res.status(400).json({ message: 'Batch is required' });
+    /* =====================================================
+       GRIDFS FILE
+    ===================================================== */
 
-    let filePath = '', fileAssetId = '', fileName = '', fileSize = 0, fileMime = '';
-    let imageAssetIds = [];
-    let imagePaths = [];
-    let imageNames = [];
+    if (
+      item.fileAssetId
+    ) {
+      const asset =
+        await getFileAssetInfo(
+          item.fileAssetId
+        );
 
-    if (resourceType === 'file') {
-      const file = req.file || getUploadedFiles(req, 'file')[0];
-      if (!file) return res.status(400).json({ message: 'File is required' });
-      if (!ALLOWED_FILE_MIMES.has(file.mimetype) && !isPdfLike(file)) {
-        removeUploadedFiles([file]);
-        return res.status(400).json({ message: 'Invalid file type' });
-      }
-      fileAssetId = await storeFileUpload(file, {
-        scope: 'knowledge-hub',
-        resourceType,
-        title: safeStr(title),
-        branchId: normalizeId(branchId),
-        intakeId: normalizeId(intakeId || ''),
-        batchId: normalizeId(batchId),
-      });
-      fileName = file.originalname;
-      fileSize = file.size;
-      fileMime = file.mimetype;
-      removeUploadedFiles([file]);
-    } else if (resourceType === 'link' || resourceType === 'video') {
-      if (!contentUrl || !isValidUrl(contentUrl)) return res.status(400).json({ message: 'Valid URL required' });
-    } else if (resourceType === 'note') {
-      if (!safeStr(textContent || '', 20000)) return res.status(400).json({ message: 'Note content required' });
-    } else if (resourceType === 'gallery') {
-      const files = getUploadedFiles(req, 'images');
-      if (files.length === 0) return res.status(400).json({ message: 'At least one image is required' });
-      if (files.length > 6) {
-        removeUploadedFiles(files);
-        return res.status(400).json({ message: 'You can upload up to 6 images' });
+      if (!asset) {
+        return res
+          .status(404)
+          .json({
+            message:
+              'File not found',
+          });
       }
 
-      for (const file of files) {
-        const ext = path.extname(file.originalname).toLowerCase();
-        if (!ALLOWED_IMAGE_MIMES.has(file.mimetype) || !ALLOWED_IMAGE_EXTS.has(ext)) {
-          removeUploadedFiles(files);
-          return res.status(400).json({ message: 'Invalid image type. Use JPG, PNG, WebP or GIF.' });
+      const stream =
+        openFileDownloadStream(
+          item.fileAssetId
+        );
+
+      if (!stream) {
+        return res
+          .status(404)
+          .json({
+            message:
+              'File not found',
+          });
+      }
+
+      res.setHeader(
+        'Content-Type',
+        asset.contentType ||
+          item.fileMime ||
+          'application/octet-stream'
+      );
+
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${(
+          item.fileName ||
+          asset.filename ||
+          'download'
+        ).replace(/"/g, '')}"`
+      );
+
+      stream.on(
+        'error',
+        (err) => {
+          if (
+            !res.headersSent
+          ) {
+            next(err);
+          } else {
+            res.destroy(
+              err
+            );
+          }
         }
+      );
+
+      stream.pipe(
+        res
+      );
+
+      return;
+    }
+
+    /* =====================================================
+       LEGACY FILE
+    ===================================================== */
+
+    if (
+      !item.filePath
+    ) {
+      return res
+        .status(404)
+        .json({
+          message:
+            'No file attached',
+        });
+    }
+
+    const resolvedPath =
+      resolveLegacyFilePath(
+        item.filePath
+      );
+
+    if (
+      !resolvedPath ||
+      !fs.existsSync(
+        resolvedPath
+      )
+    ) {
+      return res
+        .status(404)
+        .json({
+          message:
+            'File not found',
+        });
+    }
+
+    return res.download(
+      resolvedPath,
+      item.fileName ||
+        'download'
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
+/* =========================================================
+   LECTURER ADD RESOURCE
+========================================================= */
+
+export async function lecturerAddHubItem(
+  req,
+  res,
+  next
+) {
+  try {
+    if (
+      !req.auth?.sub
+    ) {
+      return res
+        .status(401)
+        .json({
+          message:
+            'Unauthorized',
+        });
+    }
+
+    const lecturer =
+      await Admin.findById(
+        req.auth.sub
+      )
+        .lean();
+
+    if (
+      !lecturer ||
+      lecturer.role !==
+        'lecturer'
+    ) {
+      return res
+        .status(403)
+        .json({
+          message:
+            'Forbidden',
+        });
+    }
+
+    const {
+      resourceType,
+      title,
+      description,
+      contentUrl,
+      textContent,
+      batchId,
+      intakeId,
+    } = req.body || {};
+
+    const type =
+      normalizeId(
+        resourceType
+      ).toLowerCase();
+
+    if (
+      ![
+        'file',
+        'link',
+        'video',
+        'note',
+      ].includes(type)
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            'Invalid resource type. Use file, link, video or note.',
+        });
+    }
+
+    const safeTitle =
+      safeStr(
+        title
+      );
+
+    if (!safeTitle) {
+      return res
+        .status(400)
+        .json({
+          message:
+            'Title is required',
+        });
+    }
+
+    const targetBatchId =
+      normalizeId(
+        batchId
+      ) ||
+      normalizeId(
+        lecturer.batchId
+      );
+
+    const targetIntakeId =
+      normalizeId(
+        intakeId
+      ) ||
+      normalizeId(
+        lecturer.intakeId
+      );
+
+    const targetBranchId =
+      normalizeId(
+        lecturer.branchId
+      );
+
+    if (
+      !targetBatchId
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            'No batch assigned to your account',
+        });
+    }
+
+    if (
+      normalizeId(
+        lecturer.batchId
+      ) &&
+      targetBatchId !==
+        normalizeId(
+          lecturer.batchId
+        )
+    ) {
+      return res
+        .status(403)
+        .json({
+          message:
+            'You can only add resources for your assigned batch',
+        });
+    }
+
+    let filePath = '';
+    let fileAssetId = '';
+    let fileName = '';
+    let fileSize = 0;
+    let fileMime = '';
+
+    if (
+      type ===
+      'file'
+    ) {
+      const file =
+        req.file ||
+        getUploadedFiles(
+          req,
+          'file'
+        )[0];
+
+      if (!file) {
+        return res
+          .status(400)
+          .json({
+            message:
+              'File is required',
+          });
       }
 
-      imageNames = files.map((file) => file.originalname);
+      if (
+        !isAllowedFile(
+          file
+        )
+      ) {
+        removeUploadedFiles(
+          [file]
+        );
+
+        return res
+          .status(400)
+          .json({
+            message:
+              'Invalid file type. Only PDF, DOCX, PPTX, XLSX, ZIP, DOC, XLS, PPT and TXT are allowed.',
+          });
+      }
 
       try {
-        for (const file of files) {
-          // GridFS avoids writing persisted image assets to the local uploads directory.
-          const assetId = await storeImageUpload(file, {
-            scope: 'knowledge-hub',
-            resourceType,
-            title: safeStr(title),
-          });
-          imageAssetIds.push(assetId);
-        }
-      } catch (err) {
-        await Promise.allSettled(imageAssetIds.map((assetId) => deleteImageAsset(assetId)));
-        throw err;
+        fileAssetId =
+          await storeFileUpload(
+            file,
+            {
+              scope:
+                'knowledge-hub',
+
+              resourceType:
+                type,
+
+              title:
+                safeTitle,
+
+              branchId:
+                targetBranchId,
+
+              intakeId:
+                targetIntakeId,
+
+              batchId:
+                targetBatchId,
+            }
+          );
+
+        fileName =
+          file.originalname;
+
+        fileSize =
+          file.size;
+
+        fileMime =
+          file.mimetype;
       } finally {
-        removeUploadedFiles(files);
+        removeUploadedFiles(
+          [file]
+        );
       }
     }
 
-    const adminId = String(req.adminAuth?.sub || req.adminAuth?.id || '');
-    const adminDoc = adminId ? await Admin.findById(adminId).select('name').lean() : null;
-    const adminName = adminDoc?.name || 'Admin';
+    if (
+      type ===
+        'link' ||
+      type ===
+        'video'
+    ) {
+      if (
+        !contentUrl ||
+        !isValidUrl(
+          contentUrl
+        )
+      ) {
+        return res
+          .status(400)
+          .json({
+            message:
+              'A valid URL is required',
+          });
+      }
+    }
+
+    if (
+      type ===
+      'note'
+    ) {
+      if (
+        !safeStr(
+          textContent ||
+            '',
+          20000
+        )
+      ) {
+        return res
+          .status(400)
+          .json({
+            message:
+              'Note content is required',
+          });
+      }
+    }
 
     let created;
+
     try {
-      created = await KnowledgeHubItem.create({
-        branchId: normalizeId(branchId),
-        intakeId: normalizeId(intakeId || ''),
-        batchId:  normalizeId(batchId),
-        resourceType,
-        title:       safeStr(title),
-        description: safeStr(description || '', 1000),
-        filePath, fileAssetId, fileName, fileSize, fileMime,
-        imageAssetIds, imagePaths, imageNames,
-        contentUrl:  contentUrl ? safeStr(contentUrl, 1000) : '',
-        textContent: textContent ? safeStr(textContent, 20000) : '',
-        addedBy:     adminId,
-        addedByName: adminName,
-        addedByRole: 'superadmin',
-      });
+      created =
+        await KnowledgeHubItem.create({
+          branchId:
+            targetBranchId,
+
+          intakeId:
+            targetIntakeId,
+
+          batchId:
+            targetBatchId,
+
+          resourceType:
+            type,
+
+          title:
+            safeTitle,
+
+          description:
+            safeStr(
+              description ||
+                '',
+              1000
+            ),
+
+          filePath,
+
+          fileAssetId,
+
+          fileName,
+
+          fileSize,
+
+          fileMime,
+
+          contentUrl:
+            contentUrl
+              ? safeStr(
+                  contentUrl,
+                  1000
+                )
+              : '',
+
+          textContent:
+            textContent
+              ? safeStr(
+                  textContent,
+                  20000
+                )
+              : '',
+
+          addedBy:
+            String(
+              lecturer._id
+            ),
+
+          addedByName:
+            lecturer.name ||
+            'Lecturer',
+
+          addedByRole:
+            'lecturer',
+        });
     } catch (err) {
-      if (fileAssetId) {
-        await deleteFileAsset(fileAssetId);
+      if (
+        fileAssetId
+      ) {
+        await Promise.allSettled([
+          deleteFileAsset(
+            fileAssetId
+          ),
+        ]);
       }
-      await Promise.allSettled(imageAssetIds.map((assetId) => deleteImageAsset(assetId)));
+
       throw err;
     }
 
-    res.status(201).json({ item: toItem(created, req) });
-  } catch (err) { next(err); }
+    return res
+      .status(201)
+      .json({
+        item:
+          toItem(
+            created
+          ),
+      });
+  } catch (err) {
+    next(err);
+  }
 }
 
-// ─── ADMIN: delete any resource ───────────────────────────────────────────────
-export async function adminDeleteHubItem(req, res, next) {
+/* =========================================================
+   LECTURER DELETE RESOURCE
+========================================================= */
+
+export async function lecturerDeleteHubItem(
+  req,
+  res,
+  next
+) {
   try {
-    const item = await KnowledgeHubItem.findByIdAndDelete(req.params.id).lean();
-    if (!item) return res.status(404).json({ message: 'Resource not found' });
-    await removeStoredKnowledgeHubFiles(item);
-    res.json({ ok: true });
-  } catch (err) { next(err); }
+    const item =
+      await KnowledgeHubItem.findById(
+        req.params.id
+      )
+        .lean();
+
+    if (!item) {
+      return res
+        .status(404)
+        .json({
+          message:
+            'Resource not found',
+        });
+    }
+
+    if (
+      String(
+        item.addedBy
+      ) !==
+      String(
+        req.auth?.sub ||
+          ''
+      )
+    ) {
+      return res
+        .status(403)
+        .json({
+          message:
+            'You can only delete your own resources',
+        });
+    }
+
+    await removeStoredKnowledgeHubFiles(
+      item
+    );
+
+    await KnowledgeHubItem.findByIdAndDelete(
+      req.params.id
+    );
+
+    return res.json({
+      ok: true,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/* =========================================================
+   ADMIN LIST ITEMS
+========================================================= */
+
+export async function adminListHubItems(
+  req,
+  res,
+  next
+) {
+  try {
+    const {
+      branchId,
+      intakeId,
+      batchId,
+      resourceType,
+    } = req.query || {};
+
+    const filter = {};
+
+    if (
+      branchId
+    ) {
+      filter.branchId =
+        normalizeId(
+          branchId
+        );
+    }
+
+    if (
+      intakeId
+    ) {
+      filter.intakeId =
+        normalizeId(
+          intakeId
+        );
+    }
+
+    if (
+      batchId
+    ) {
+      filter.batchId =
+        normalizeId(
+          batchId
+        );
+    }
+
+    if (
+      resourceType
+    ) {
+      filter.resourceType =
+        normalizeId(
+          resourceType
+        );
+    }
+
+    const items =
+      await KnowledgeHubItem.find(
+        filter
+      )
+        .sort({
+          createdAt: -1,
+        })
+        .lean();
+
+    return res.json({
+      items:
+        items.map(
+          toItem
+        ),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/* =========================================================
+   ADMIN ADD RESOURCE
+========================================================= */
+
+export async function adminAddHubItem(
+  req,
+  res,
+  next
+) {
+  let uploadedFiles =
+    [];
+
+  let imageAssetIds =
+    [];
+
+  let fileAssetId =
+    '';
+
+  try {
+    const {
+      resourceType,
+      title,
+      description,
+      contentUrl,
+      textContent,
+      branchId,
+      intakeId,
+      batchId,
+    } = req.body || {};
+
+    const type =
+      normalizeId(
+        resourceType
+      ).toLowerCase();
+
+    const safeTitle =
+      safeStr(
+        title
+      );
+
+    if (
+      !VALID_RESOURCE_TYPES.has(
+        type
+      )
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            'Invalid resource type',
+        });
+    }
+
+    if (
+      !safeTitle
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            'Title is required',
+        });
+    }
+
+    /*
+      Keep branch/batch validation because
+      your existing form/hierarchy uses them.
+    */
+
+    const safeBranchId =
+      normalizeId(
+        branchId
+      );
+
+    const safeIntakeId =
+      normalizeId(
+        intakeId
+      );
+
+    const safeBatchId =
+      normalizeId(
+        batchId
+      );
+
+    if (
+      !safeBranchId
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            'Branch is required',
+        });
+    }
+
+    if (
+      !safeBatchId
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            'Batch is required',
+        });
+    }
+
+    let filePath = '';
+    let fileName = '';
+    let fileSize = 0;
+    let fileMime = '';
+
+    let imagePaths =
+      [];
+
+    let imageNames =
+      [];
+
+    /* =====================================================
+       FILE
+    ===================================================== */
+
+    if (
+      type ===
+      'file'
+    ) {
+      const file =
+        req.file ||
+        getUploadedFiles(
+          req,
+          'file'
+        )[0];
+
+      if (!file) {
+        return res
+          .status(400)
+          .json({
+            message:
+              'File is required',
+          });
+      }
+
+      uploadedFiles =
+        [file];
+
+      if (
+        !isAllowedFile(
+          file
+        )
+      ) {
+        removeUploadedFiles(
+          uploadedFiles
+        );
+
+        return res
+          .status(400)
+          .json({
+            message:
+              'Invalid file type',
+          });
+      }
+
+      fileAssetId =
+        await storeFileUpload(
+          file,
+          {
+            scope:
+              'knowledge-hub',
+
+            resourceType:
+              type,
+
+            title:
+              safeTitle,
+
+            branchId:
+              safeBranchId,
+
+            intakeId:
+              safeIntakeId,
+
+            batchId:
+              safeBatchId,
+          }
+        );
+
+      fileName =
+        file.originalname;
+
+      fileSize =
+        file.size;
+
+      fileMime =
+        file.mimetype;
+
+      removeUploadedFiles(
+        uploadedFiles
+      );
+
+      uploadedFiles =
+        [];
+    }
+
+    /* =====================================================
+       LINK / VIDEO
+    ===================================================== */
+
+    if (
+      type ===
+        'link' ||
+      type ===
+        'video'
+    ) {
+      if (
+        !contentUrl ||
+        !isValidUrl(
+          contentUrl
+        )
+      ) {
+        return res
+          .status(400)
+          .json({
+            message:
+              'A valid URL is required',
+          });
+      }
+    }
+
+    /* =====================================================
+       NOTE
+    ===================================================== */
+
+    if (
+      type ===
+      'note'
+    ) {
+      if (
+        !safeStr(
+          textContent ||
+            '',
+          20000
+        )
+      ) {
+        return res
+          .status(400)
+          .json({
+            message:
+              'Note content is required',
+          });
+      }
+    }
+
+    /* =====================================================
+       GALLERY
+    ===================================================== */
+
+    if (
+      type ===
+      'gallery'
+    ) {
+      const files =
+        getUploadedFiles(
+          req,
+          'images'
+        );
+
+      uploadedFiles =
+        files;
+
+      if (
+        files.length ===
+        0
+      ) {
+        return res
+          .status(400)
+          .json({
+            message:
+              'At least one image is required',
+          });
+      }
+
+      if (
+        files.length >
+        6
+      ) {
+        removeUploadedFiles(
+          files
+        );
+
+        return res
+          .status(400)
+          .json({
+            message:
+              'You can upload up to 6 images',
+          });
+      }
+
+      const invalidFile =
+        files.find(
+          (file) =>
+            !isAllowedImage(
+              file
+            )
+        );
+
+      if (
+        invalidFile
+      ) {
+        removeUploadedFiles(
+          files
+        );
+
+        return res
+          .status(400)
+          .json({
+            message:
+              'Invalid image type. Use JPG, JPEG, PNG, WebP or GIF.',
+          });
+      }
+
+      imageNames =
+        files.map(
+          (file) =>
+            file.originalname
+        );
+
+      /*
+        Store images in GridFS.
+
+        This is preferable to local container disk because
+        deployments/restarts will not delete the images.
+      */
+
+      try {
+        for (
+          const file of files
+        ) {
+          const assetId =
+            await storeImageUpload(
+              file,
+              {
+                scope:
+                  'knowledge-hub',
+
+                resourceType:
+                  type,
+
+                title:
+                  safeTitle,
+
+                branchId:
+                  safeBranchId,
+
+                intakeId:
+                  safeIntakeId,
+
+                batchId:
+                  safeBatchId,
+              }
+            );
+
+          imageAssetIds.push(
+            assetId
+          );
+        }
+      } catch (err) {
+        await Promise.allSettled(
+          imageAssetIds.map(
+            (assetId) =>
+              deleteImageAsset(
+                assetId
+              )
+          )
+        );
+
+        imageAssetIds =
+          [];
+
+        throw err;
+      } finally {
+        removeUploadedFiles(
+          files
+        );
+
+        uploadedFiles =
+          [];
+      }
+    }
+
+    /* =====================================================
+       ADMIN INFORMATION
+    ===================================================== */
+
+    const adminId =
+      String(
+        req.adminAuth?.sub ||
+        req.adminAuth?.id ||
+        ''
+      );
+
+    let adminName =
+      'Admin';
+
+    if (
+      adminId
+    ) {
+      const admin =
+        await Admin.findById(
+          adminId
+        )
+          .select(
+            'name role'
+          )
+          .lean();
+
+      if (
+        admin?.name
+      ) {
+        adminName =
+          admin.name;
+      }
+    }
+
+    /* =====================================================
+       CREATE DOCUMENT
+    ===================================================== */
+
+    let created;
+
+    try {
+      created =
+        await KnowledgeHubItem.create({
+          branchId:
+            safeBranchId,
+
+          intakeId:
+            safeIntakeId,
+
+          batchId:
+            safeBatchId,
+
+          resourceType:
+            type,
+
+          title:
+            safeTitle,
+
+          description:
+            safeStr(
+              description ||
+                '',
+              1000
+            ),
+
+          filePath,
+
+          fileAssetId,
+
+          fileName,
+
+          fileSize,
+
+          fileMime,
+
+          imageAssetIds,
+
+          imagePaths,
+
+          imageNames,
+
+          contentUrl:
+            contentUrl
+              ? safeStr(
+                  contentUrl,
+                  1000
+                )
+              : '',
+
+          textContent:
+            textContent
+              ? safeStr(
+                  textContent,
+                  20000
+                )
+              : '',
+
+          addedBy:
+            adminId,
+
+          addedByName:
+            adminName,
+
+          addedByRole:
+            req.adminAuth?.role ===
+              'superadmin'
+              ? 'superadmin'
+              : 'admin',
+        });
+    } catch (err) {
+      if (
+        fileAssetId
+      ) {
+        await Promise.allSettled([
+          deleteFileAsset(
+            fileAssetId
+          ),
+        ]);
+      }
+
+      if (
+        imageAssetIds.length
+      ) {
+        await Promise.allSettled(
+          imageAssetIds.map(
+            (assetId) =>
+              deleteImageAsset(
+                assetId
+              )
+          )
+        );
+      }
+
+      throw err;
+    }
+
+    return res
+      .status(201)
+      .json({
+        item:
+          toItem(
+            created
+          ),
+      });
+  } catch (err) {
+    /*
+      Remove temporary multer files in case
+      an unexpected failure happened.
+    */
+
+    if (
+      uploadedFiles.length
+    ) {
+      removeUploadedFiles(
+        uploadedFiles
+      );
+    }
+
+    next(err);
+  }
+}
+
+/* =========================================================
+   ADMIN DELETE RESOURCE
+========================================================= */
+
+export async function adminDeleteHubItem(
+  req,
+  res,
+  next
+) {
+  try {
+    /*
+      Load first, delete assets, then remove DB document.
+
+      This is safer than deleting the MongoDB document first.
+    */
+
+    const item =
+      await KnowledgeHubItem.findById(
+        req.params.id
+      )
+        .lean();
+
+    if (!item) {
+      return res
+        .status(404)
+        .json({
+          message:
+            'Resource not found',
+        });
+    }
+
+    await removeStoredKnowledgeHubFiles(
+      item
+    );
+
+    await KnowledgeHubItem.findByIdAndDelete(
+      req.params.id
+    );
+
+    return res.json({
+      ok: true,
+      message:
+        'Knowledge Hub resource deleted successfully',
+    });
+  } catch (err) {
+    next(err);
+  }
 }
