@@ -31,33 +31,55 @@ function fileLabel(files) {
 }
 
 /* =========================================================
-   BUILD MEDIA URL
+   IMAGE URL
+
+   IMPORTANT:
+   Do NOT add apiBase here.
+
+   Production URL becomes:
+
+   https://iaaccampus.com/api/knowledge-hub/media/ID/0
+
+   because the browser automatically uses the current domain.
 ========================================================= */
 
-function buildHubImageUrl(itemId, index, apiBase = '') {
-  if (!itemId && itemId !== 0) {
+function buildHubImageUrl(itemId, index) {
+  if (!itemId) {
     return '';
   }
 
-  const path =
-    `/api/knowledge-hub/media/${encodeURIComponent(
-      String(itemId)
-    )}/${index}`;
+  return `/api/knowledge-hub/media/${encodeURIComponent(
+    String(itemId)
+  )}/${index}`;
+}
 
-  const base = String(apiBase || '')
+/* =========================================================
+   API ORIGIN FOR MULTIPART UPLOAD
+
+   getApiBaseUrl() may return:
+
+   https://iaaccampus.com
+   OR
+   https://iaaccampus.com/api
+
+   We remove the final /api because below we append
+   /api/admin/knowledge-hub ourselves.
+========================================================= */
+
+function normalizeApiOrigin(value) {
+  const raw = String(value || '')
     .trim()
     .replace(/\/+$/, '');
 
-  /*
-    Same-domain production:
-
-    /api/knowledge-hub/media/...
-  */
-  if (!base) {
-    return path;
+  if (!raw) {
+    return '';
   }
 
-  return `${base}${path}`;
+  if (raw.endsWith('/api')) {
+    return raw.slice(0, -4);
+  }
+
+  return raw;
 }
 
 /* =========================================================
@@ -96,12 +118,10 @@ export default function AdminKnowledgeHubPage() {
   const fileRef = useRef(null);
 
   /* =======================================================
-     API BASE
+     API ORIGIN
   ======================================================= */
 
-  const [apiBase, setApiBase] = useState(
-    import.meta.env.VITE_API_URL || ''
-  );
+  const [apiOrigin, setApiOrigin] = useState('');
 
   /* =======================================================
      LOAD POSTS
@@ -125,17 +145,22 @@ export default function AdminKnowledgeHubPage() {
           ? data.items
           : [];
 
-      setItems(
-        nextItems
+      console.log(
+        'Knowledge Hub API response:',
+        data
       );
 
       console.log(
         'Knowledge Hub items:',
         nextItems
       );
+
+      setItems(
+        nextItems
+      );
     } catch (err) {
       console.error(
-        'Knowledge Hub load error:',
+        'Knowledge Hub load failed:',
         err
       );
 
@@ -157,13 +182,13 @@ export default function AdminKnowledgeHubPage() {
   }, []);
 
   /* =======================================================
-     RESOLVE API BASE
+     GET API ORIGIN
   ======================================================= */
 
   useEffect(() => {
     let cancelled = false;
 
-    async function resolveApiBase() {
+    async function resolveApiOrigin() {
       try {
         const base =
           await getApiBaseUrl();
@@ -172,25 +197,39 @@ export default function AdminKnowledgeHubPage() {
           return;
         }
 
-        setApiBase(
-          String(
-            base || ''
-          )
-            .trim()
-            .replace(
-              /\/+$/,
-              ''
-            )
+        const normalized =
+          normalizeApiOrigin(
+            base
+          );
+
+        console.log(
+          'Raw API base:',
+          base
+        );
+
+        console.log(
+          'Normalized API origin:',
+          normalized
+        );
+
+        setApiOrigin(
+          normalized
         );
       } catch (err) {
         console.warn(
-          'Failed to determine API base URL:',
+          'Could not resolve API origin:',
           err
         );
+
+        /*
+          Same-origin production fallback.
+        */
+
+        setApiOrigin('');
       }
     }
 
-    resolveApiBase();
+    resolveApiOrigin();
 
     return () => {
       cancelled = true;
@@ -236,11 +275,11 @@ export default function AdminKnowledgeHubPage() {
 
     setImages([]);
 
+    setPreviewUrls([]);
+
     setFormErr('');
 
-    if (
-      fileRef.current
-    ) {
+    if (fileRef.current) {
       fileRef.current.value =
         '';
     }
@@ -250,45 +289,52 @@ export default function AdminKnowledgeHubPage() {
      IMAGE SELECT
   ======================================================= */
 
-  function onImageChange(
-    event
-  ) {
+  function onImageChange(event) {
     const selectedFiles =
       Array.from(
         event.target.files ||
           []
       );
 
-    const allowedFiles =
-      selectedFiles.filter(
-        (file) =>
-          file.type.startsWith(
-            'image/'
-          )
-      );
-
     if (
-      allowedFiles.length !==
-      selectedFiles.length
-    ) {
-      setFormErr(
-        'Only image files are allowed.'
-      );
-    } else {
-      setFormErr('');
-    }
-
-    if (
-      allowedFiles.length >
+      selectedFiles.length >
       6
     ) {
       setFormErr(
         'Maximum 6 images are allowed.'
       );
+    } else {
+      setFormErr('');
+    }
+
+    const validFiles =
+      selectedFiles.filter(
+        (file) => {
+          const type =
+            String(
+              file.type || ''
+            ).toLowerCase();
+
+          return [
+            'image/jpeg',
+            'image/png',
+            'image/webp',
+            'image/gif',
+          ].includes(type);
+        }
+      );
+
+    if (
+      validFiles.length !==
+      selectedFiles.length
+    ) {
+      setFormErr(
+        'Only JPG, JPEG, PNG, WebP and GIF images are allowed.'
+      );
     }
 
     setImages(
-      allowedFiles.slice(
+      validFiles.slice(
         0,
         6
       )
@@ -299,10 +345,10 @@ export default function AdminKnowledgeHubPage() {
      CREATE POST
   ======================================================= */
 
-  async function onCreate(
-    event
-  ) {
+  async function onCreate(event) {
     event.preventDefault();
+
+    setFormErr('');
 
     if (!title.trim()) {
       setFormErr(
@@ -326,7 +372,7 @@ export default function AdminKnowledgeHubPage() {
       images.length === 0
     ) {
       setFormErr(
-        'Please add at least one image.'
+        'Please select at least one image.'
       );
 
       return;
@@ -344,29 +390,7 @@ export default function AdminKnowledgeHubPage() {
 
     setSaving(true);
 
-    setFormErr('');
-
     try {
-      let apiOrigin =
-        apiBase;
-
-      if (
-        !apiOrigin
-      ) {
-        apiOrigin =
-          await getApiBaseUrl();
-      }
-
-      apiOrigin =
-        String(
-          apiOrigin || ''
-        )
-          .trim()
-          .replace(
-            /\/+$/,
-            ''
-          );
-
       const formData =
         new globalThis.FormData();
 
@@ -374,6 +398,11 @@ export default function AdminKnowledgeHubPage() {
         'resourceType',
         'gallery'
       );
+
+      /*
+        Knowledge Hub is visible to
+        every student.
+      */
 
       formData.append(
         'branchId',
@@ -404,15 +433,31 @@ export default function AdminKnowledgeHubPage() {
         (file) => {
           formData.append(
             'images',
-            file
+            file,
+            file.name
           );
         }
       );
+
+      /*
+        PRODUCTION:
+
+        /api/admin/knowledge-hub
+
+        DEVELOPMENT:
+
+        apiOrigin can point to backend server.
+      */
 
       const endpoint =
         apiOrigin
           ? `${apiOrigin}/api/admin/knowledge-hub`
           : '/api/admin/knowledge-hub';
+
+      console.log(
+        'Knowledge Hub upload endpoint:',
+        endpoint
+      );
 
       const response =
         await fetch(
@@ -421,29 +466,38 @@ export default function AdminKnowledgeHubPage() {
             method:
               'POST',
 
-            body:
-              formData,
-
             credentials:
               'include',
+
+            body:
+              formData,
           }
         );
 
-      if (
-        !response.ok
-      ) {
-        const data =
-          await response
-            .json()
-            .catch(
-              () => ({})
-            );
+      const responseData =
+        await response
+          .json()
+          .catch(
+            () => ({})
+          );
+
+      if (!response.ok) {
+        console.error(
+          'Knowledge Hub publish response:',
+          response.status,
+          responseData
+        );
 
         throw new Error(
-          data?.message ||
+          responseData?.message ||
             `Failed to publish (${response.status})`
         );
       }
+
+      console.log(
+        'Knowledge Hub published:',
+        responseData
+      );
 
       resetForm();
 
@@ -454,7 +508,7 @@ export default function AdminKnowledgeHubPage() {
       await loadItems();
     } catch (err) {
       console.error(
-        'Publish knowledge hub post failed:',
+        'Knowledge Hub publish failed:',
         err
       );
 
@@ -468,12 +522,10 @@ export default function AdminKnowledgeHubPage() {
   }
 
   /* =======================================================
-     DELETE POST
+     DELETE
   ======================================================= */
 
-  async function onDelete(
-    id
-  ) {
+  async function onDelete(id) {
     const confirmed =
       window.confirm(
         'Delete this knowledge hub post?'
@@ -485,7 +537,9 @@ export default function AdminKnowledgeHubPage() {
 
     try {
       await apiDelete(
-        `/api/admin/knowledge-hub/${id}`
+        `/api/admin/knowledge-hub/${encodeURIComponent(
+          id
+        )}`
       );
 
       await loadItems();
@@ -533,32 +587,26 @@ export default function AdminKnowledgeHubPage() {
           <button
             type="button"
             onClick={() => {
-              if (
-                showForm
-              ) {
+              if (showForm) {
                 resetForm();
               }
 
               setShowForm(
-                (value) =>
-                  !value
+                (current) =>
+                  !current
               );
             }}
             className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
           >
             {showForm ? (
               <>
-                <X
-                  size={14}
-                />
+                <X size={14} />
 
                 Close form
               </>
             ) : (
               <>
-                <Plus
-                  size={14}
-                />
+                <Plus size={14} />
 
                 New post
               </>
@@ -574,16 +622,16 @@ export default function AdminKnowledgeHubPage() {
       {showForm ? (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           {formErr ? (
-            <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+            <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700">
               {formErr}
             </div>
           ) : null}
 
           <form
-            className="grid grid-cols-1 gap-4 md:grid-cols-2"
             onSubmit={
               onCreate
             }
+            className="grid grid-cols-1 gap-4 md:grid-cols-2"
           >
             {/* TITLE */}
 
@@ -593,21 +641,19 @@ export default function AdminKnowledgeHubPage() {
               </label>
 
               <input
-                value={
-                  title
-                }
+                type="text"
+                value={title}
                 onChange={(
                   event
                 ) =>
                   setTitle(
-                    event
-                      .target
+                    event.target
                       .value
                   )
                 }
-                className={`mt-1 ${inputCls}`}
-                required
                 placeholder="Week 3 highlights"
+                required
+                className={`mt-1 ${inputCls}`}
               />
             </div>
 
@@ -626,14 +672,13 @@ export default function AdminKnowledgeHubPage() {
                   event
                 ) =>
                   setDescription(
-                    event
-                      .target
+                    event.target
                       .value
                   )
                 }
-                className={`mt-1 ${inputCls} min-h-28 resize-y`}
-                required
                 placeholder="Write the summary that students should read with the images."
+                required
+                className={`mt-1 ${inputCls} min-h-32 resize-y`}
               />
             </div>
 
@@ -649,26 +694,26 @@ export default function AdminKnowledgeHubPage() {
                   fileRef
                 }
                 type="file"
-                accept=".jpg,.jpeg,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif"
                 multiple
+                accept=".jpg,.jpeg,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif"
                 onChange={
                   onImageChange
                 }
-                className="mt-1 block w-full text-sm text-slate-600"
+                className="mt-2 block w-full text-sm text-slate-600"
               />
 
-              <p className="mt-1 text-xs text-slate-500">
-                Up to 6 images. JPG, PNG, WebP, or GIF.
+              <p className="mt-2 text-xs text-slate-500">
+                Maximum 6 images. JPG, JPEG, PNG, WebP or GIF.
               </p>
 
-              <p className="mt-2 text-xs font-medium text-slate-700">
+              <p className="mt-2 text-xs font-semibold text-slate-700">
                 {fileLabel(
                   images
                 )}
               </p>
             </div>
 
-            {/* PREVIEWS */}
+            {/* LOCAL PREVIEWS */}
 
             {previewUrls.length >
             0 ? (
@@ -682,7 +727,7 @@ export default function AdminKnowledgeHubPage() {
                       key={
                         url
                       }
-                      className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"
+                      className="overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
                     >
                       <img
                         src={
@@ -693,9 +738,12 @@ export default function AdminKnowledgeHubPage() {
                             index
                           ]
                             ?.name ||
-                          `Preview ${index + 1}`
+                          `Preview ${
+                            index +
+                            1
+                          }`
                         }
-                        className="h-32 w-full object-cover"
+                        className="h-36 w-full object-cover"
                       />
                     </div>
                   )
@@ -703,15 +751,15 @@ export default function AdminKnowledgeHubPage() {
               </div>
             ) : null}
 
-            {/* ACTIONS */}
+            {/* FORM BUTTONS */}
 
-            <div className="flex items-center gap-3 md:col-span-2">
+            <div className="flex flex-wrap items-center gap-3 md:col-span-2">
               <button
                 type="submit"
                 disabled={
                   saving
                 }
-                className="inline-flex items-center gap-2 rounded-xl bg-sky-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sky-800 disabled:opacity-60"
+                className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-sky-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Upload
                   size={14}
@@ -724,6 +772,9 @@ export default function AdminKnowledgeHubPage() {
 
               <button
                 type="button"
+                disabled={
+                  saving
+                }
                 onClick={() => {
                   resetForm();
 
@@ -731,7 +782,7 @@ export default function AdminKnowledgeHubPage() {
                     false
                   );
                 }}
-                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="min-h-11 rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
               >
                 Cancel
               </button>
@@ -747,11 +798,11 @@ export default function AdminKnowledgeHubPage() {
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-bold text-slate-900">
+            <h3 className="text-lg font-bold text-slate-900">
               Published posts
             </h3>
 
-            <p className="text-xs text-slate-500">
+            <p className="mt-1 text-sm text-slate-500">
               Visible to all students in the student Knowledge Hub.
             </p>
           </div>
@@ -764,7 +815,7 @@ export default function AdminKnowledgeHubPage() {
             disabled={
               loading
             }
-            className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
           >
             {loading
               ? 'Refreshing…'
@@ -775,7 +826,7 @@ export default function AdminKnowledgeHubPage() {
         {/* ERROR */}
 
         {listErr ? (
-          <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+          <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
             {listErr}
           </div>
         ) : null}
@@ -783,45 +834,55 @@ export default function AdminKnowledgeHubPage() {
         {/* LOADING */}
 
         {loading ? (
-          <div className="text-sm text-slate-500">
-            Loading…
+          <div className="py-10 text-center text-sm text-slate-500">
+            Loading posts…
           </div>
         ) : items.length ===
           0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
-            No posts yet. Publish the first gallery above.
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center text-sm text-slate-500">
+            No posts yet. Publish your first Knowledge Hub post.
           </div>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-5 lg:grid-cols-2">
             {items.map(
               (item) => {
                 /*
-                  IMPORTANT:
+                  Backend currently returns imagePaths containing:
 
-                  We do not use item.imagePaths as the final URL.
+                  /api/knowledge-hub/media/ID/0
 
-                  We only use its length so that we know
-                  how many images belong to the item.
+                  However we only need the number
+                  of images.
 
-                  The real src is generated from:
-
-                  /api/knowledge-hub/media/:id/:index
+                  The URL is regenerated below.
                 */
 
-                const imageCount =
+                let imageCount =
+                  0;
+
+                if (
                   Array.isArray(
-                    item.imageAssetIds
+                    item.imagePaths
+                  ) &&
+                  item
+                    .imagePaths
+                    .length >
+                    0
+                ) {
+                  imageCount =
+                    item
+                      .imagePaths
+                      .length;
+                } else if (
+                  Array.isArray(
+                    item.imageNames
                   )
-                    ? item.imageAssetIds.length
-                    : Array.isArray(
-                          item.imagePaths
-                        )
-                      ? item.imagePaths.length
-                      : Array.isArray(
-                            item.imageNames
-                          )
-                        ? item.imageNames.length
-                        : 0;
+                ) {
+                  imageCount =
+                    item
+                      .imageNames
+                      .length;
+                }
 
                 const visibleImageCount =
                   Math.min(
@@ -834,20 +895,27 @@ export default function AdminKnowledgeHubPage() {
                     key={
                       item.id
                     }
-                    className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-sm"
+                    className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
                   >
-                    {/* IMAGES */}
+                    {/* =====================================
+                        IMAGE GALLERY
+                    ===================================== */}
 
                     {imageCount >
                     0 ? (
                       <div
                         className={[
-                          'grid gap-0.5 bg-slate-200',
+                          'grid overflow-hidden bg-slate-100',
 
                           imageCount ===
                           1
                             ? 'grid-cols-1'
                             : 'grid-cols-2',
+
+                          imageCount >
+                          1
+                            ? 'gap-px'
+                            : '',
                         ].join(
                           ' '
                         )}
@@ -861,17 +929,22 @@ export default function AdminKnowledgeHubPage() {
                             _,
                             index
                           ) => {
+                            /*
+                              IMPORTANT FIX
+
+                              NO apiBase here.
+                            */
+
                             const src =
                               buildHubImageUrl(
                                 item.id,
-                                index,
-                                apiBase
+                                index
                               );
 
                             return (
                               <div
                                 key={`${item.id}-${index}`}
-                                className="relative min-h-40 overflow-hidden bg-slate-100"
+                                className="relative overflow-hidden bg-slate-100"
                               >
                                 <img
                                   src={
@@ -882,17 +955,20 @@ export default function AdminKnowledgeHubPage() {
                                       .imageNames?.[
                                       index
                                     ] ||
-                                    `${item.title || 'Knowledge Hub'} image ${index + 1}`
+                                    `${item.title || 'Knowledge Hub'} image ${
+                                      index +
+                                      1
+                                    }`
                                   }
                                   className={
                                     imageCount ===
                                     1
-                                      ? 'h-72 w-full object-cover'
-                                      : 'h-44 w-full object-cover'
+                                      ? 'h-80 w-full object-cover'
+                                      : 'h-56 w-full object-cover'
                                   }
                                   onLoad={() => {
                                     console.log(
-                                      'Knowledge Hub image loaded:',
+                                      '✅ Knowledge Hub image loaded:',
                                       src
                                     );
                                   }}
@@ -900,7 +976,7 @@ export default function AdminKnowledgeHubPage() {
                                     event
                                   ) => {
                                     console.error(
-                                      'Knowledge Hub image failed:',
+                                      '❌ Knowledge Hub image failed:',
                                       {
                                         itemId:
                                           item.id,
@@ -911,16 +987,26 @@ export default function AdminKnowledgeHubPage() {
                                       }
                                     );
 
-                                    event.currentTarget.style.opacity =
-                                      '0';
+                                    /*
+                                      DO NOT:
+                                      opacity = 0
+
+                                      Keep the image element visible
+                                      so debugging is easier.
+                                    */
+
+                                    event.currentTarget.alt =
+                                      `Image failed to load: ${src}`;
                                   }}
                                 />
+
+                                {/* MORE IMAGES */}
 
                                 {index ===
                                   3 &&
                                 imageCount >
                                   4 ? (
-                                  <div className="absolute inset-0 flex items-center justify-center bg-black/45 text-xl font-bold text-white">
+                                  <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-2xl font-bold text-white">
                                     +
                                     {imageCount -
                                       4}
@@ -932,30 +1018,44 @@ export default function AdminKnowledgeHubPage() {
                         )}
                       </div>
                     ) : (
-                      <div className="flex h-40 items-center justify-center bg-slate-100 text-slate-400">
-                        <ImageIcon
-                          size={
-                            28
-                          }
-                        />
+                      <div className="flex h-56 items-center justify-center bg-slate-100 text-slate-400">
+                        <div className="text-center">
+                          <ImageIcon
+                            size={
+                              34
+                            }
+                            className="mx-auto"
+                          />
+
+                          <p className="mt-2 text-xs">
+                            No images
+                          </p>
+                        </div>
                       </div>
                     )}
 
-                    {/* CONTENT */}
+                    {/* =====================================
+                        CONTENT
+                    ===================================== */}
 
-                    <div className="p-4">
-                      <div className="flex items-start justify-between gap-3">
+                    <div className="p-5">
+                      <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-bold text-slate-900">
+                          <h4 className="text-base font-bold text-slate-900">
                             {item.title ||
                               'Untitled'}
-                          </p>
+                          </h4>
 
-                          <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-slate-500">
-                            {item.description ||
-                              ''}
-                          </p>
+                          {item.description ? (
+                            <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-600">
+                              {
+                                item.description
+                              }
+                            </p>
+                          ) : null}
                         </div>
+
+                        {/* DELETE */}
 
                         <button
                           type="button"
@@ -964,36 +1064,39 @@ export default function AdminKnowledgeHubPage() {
                               item.id
                             )
                           }
+                          title="Delete post"
                           aria-label="Delete post"
-                          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-rose-600 hover:bg-rose-100"
+                          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-rose-600 transition hover:bg-rose-50"
                         >
                           <Trash2
-                            size={14}
+                            size={17}
                           />
                         </button>
                       </div>
 
-                      <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                        <span className="rounded-full bg-white px-2.5 py-1">
+                      {/* TAGS */}
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
                           {item.resourceType ||
                             'gallery'}
                         </span>
 
-                        <span className="rounded-full bg-white px-2.5 py-1">
-                          all students
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                          All students
                         </span>
 
                         {imageCount >
                         0 ? (
-                          <span className="rounded-full bg-white px-2.5 py-1">
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
                             {
                               imageCount
                             }{' '}
                             image
-                            {imageCount !==
+                            {imageCount ===
                             1
-                              ? 's'
-                              : ''}
+                              ? ''
+                              : 's'}
                           </span>
                         ) : null}
                       </div>
