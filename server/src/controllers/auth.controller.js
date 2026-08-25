@@ -53,6 +53,124 @@ function normalizeId(value) {
   return String(value);
 }
 
+function getBranchType(branchId) {
+  const normalized = String(branchId || '')
+    .toLowerCase();
+
+  if (!normalized) {
+    return '';
+  }
+
+  if (normalized.includes('airport')) {
+    return 'airport';
+  }
+
+  if (
+    normalized.includes('central') ||
+    normalized.includes('academy')
+  ) {
+    return 'central';
+  }
+
+  if (normalized.includes('city')) {
+    return 'city';
+  }
+
+  return '';
+}
+
+function extractBatchTwoDigits(batchId) {
+  const normalized = String(batchId || '');
+  const match = normalized.match(
+    /(\d{2})/
+  );
+
+  return match ? match[1] : '';
+}
+
+function validateStudentIdForBranchEnrollment(
+  studentId,
+  branchId,
+  batchId
+) {
+  const normalizedStudentId = String(
+    studentId || ''
+  )
+    .trim()
+    .toUpperCase();
+
+  if (
+    !/^[A-Z0-9]+$/.test(
+      normalizedStudentId
+    )
+  ) {
+    return 'Student ID must contain only capital letters and numbers.';
+  }
+
+  const firstTwoDigits = (
+    normalizedStudentId.match(
+      /\d/g
+    ) || []
+  )
+    .slice(0, 2)
+    .join('');
+
+  const batchTwoDigits =
+    extractBatchTwoDigits(batchId);
+
+  if (
+    batchTwoDigits &&
+    firstTwoDigits !==
+      batchTwoDigits
+  ) {
+    return `Student ID must include ${batchTwoDigits} as the first 2 digits to match the selected batch.`;
+  }
+
+  const branchType =
+    getBranchType(branchId);
+
+  const allowedPrefixesByBranch = {
+    city: [
+      'CC',
+      'GO',
+      'TR',
+      'CG',
+    ],
+
+    airport: [
+      'CCR',
+      'GOR',
+      'TRR',
+      'CGR',
+    ],
+
+    central: [
+      'CCK',
+      'GOK',
+      'TRK',
+      'CGK',
+    ],
+  };
+
+  const allowedPrefixes =
+    allowedPrefixesByBranch[
+      branchType
+    ] || [];
+
+  if (
+    allowedPrefixes.length > 0 &&
+    !allowedPrefixes.some((prefix) =>
+      normalizedStudentId.startsWith(
+        prefix
+      )
+    )
+  ) {
+    return `Student ID prefix is invalid for this branch. Allowed prefixes: ${allowedPrefixes.join(', ')}.`;
+  }
+
+  return '';
+}
+
 function sha256Hex(value) {
   return crypto
     .createHash('sha256')
@@ -764,6 +882,24 @@ export async function verifyAndRegisterStudent(
         });
     }
 
+    const studentIdValidationError =
+      validateStudentIdForBranchEnrollment(
+        studentData.studentId,
+        studentData.branchId,
+        studentData.batchId
+      );
+
+    if (
+      studentIdValidationError
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            studentIdValidationError,
+        });
+    }
+
     const pendingOtp =
       await Otp.findOne({
         email:
@@ -1102,6 +1238,24 @@ export async function registerWithoutOtp(
         .json({
           message:
             'Password must be at least 8 characters',
+        });
+    }
+
+    const studentIdValidationError =
+      validateStudentIdForBranchEnrollment(
+        studentData.studentId,
+        studentData.branchId,
+        studentData.batchId
+      );
+
+    if (
+      studentIdValidationError
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            studentIdValidationError,
         });
     }
 
