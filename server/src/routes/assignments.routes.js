@@ -6,6 +6,7 @@ import {
   getStudentAssignments,
   listAdminAssignments,
   submitAssignment,
+  updateAssignment,
 } from '../controllers/assignments.controller.js';
 import { requirePermission } from '../middleware/adminAuth.js';
 import { requireAuth, requireStudent } from '../middleware/auth.js';
@@ -78,6 +79,13 @@ adminAssignmentsRouter.post(
   requirePermission('ADD_ASSIGNMENTS'),
   adminUpload.single('referenceDocument'),
   createAssignment
+);
+
+adminAssignmentsRouter.put(
+  '/:assignmentId',
+  requirePermission('EDIT_ASSIGNMENTS'),
+  adminUpload.single('referenceDocument'),
+  updateAssignment
 );
 
 studentAssignmentsRouter.get('/', requireAuth, requireStudent, getStudentAssignments);

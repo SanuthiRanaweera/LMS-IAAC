@@ -220,6 +220,86 @@ export async function createAssignment(req, res, next) {
   }
 }
 
+export async function updateAssignment(req, res, next) {
+  try {
+    const assignmentId = normalizeId(req.params?.assignmentId);
+
+    if (!mongoose.Types.ObjectId.isValid(assignmentId)) {
+      return res.status(400).json({ message: 'A valid assignment ID is required.' });
+    }
+
+    const { errors, normalized } = validateAssignmentPayload(req.body || {});
+    const branches = errors.length === 0 ? await loadAcademicBranches() : [];
+    const batchContext = errors.length === 0
+      ? findBatchInBranches(branches, normalized.branchId, normalized.batchId)
+      : null;
+
+    if (batchContext?.batch?.name && !batchMatchesCourse(batchContext.batch.name, normalized.course)) {
+      errors.push(`Selected batch is associated with ${batchContext.batch.name}, not ${normalized.course}.`);
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).json({ message: 'Validation failed', errors });
+    }
+
+    const existing = await Assignment.findOne({ _id: assignmentId, isActive: { $ne: false } }).lean();
+
+    if (!existing) {
+      return res.status(404).json({ message: 'Assignment not found.' });
+    }
+
+    let referenceDocumentUrl = safeTrim(req.body?.referenceDocumentUrl);
+
+    if (!referenceDocumentUrl) {
+      referenceDocumentUrl = safeTrim(existing.referenceDocumentUrl);
+    }
+
+    if (req.file?.buffer && req.file?.originalname) {
+      const upload = await uploadAssignmentFileToR2({
+        folder: 'assignments/reference-documents',
+        fileName: req.file.originalname,
+        fileBuffer: req.file.buffer,
+        mimeType: req.file.mimetype,
+        metadata: {
+          branchid: normalized.branchId,
+          batchid: normalized.batchId,
+          course: normalized.course,
+        },
+      });
+
+      referenceDocumentUrl = upload.storageUri;
+    }
+
+    const updated = await Assignment.findByIdAndUpdate(
+      assignmentId,
+      {
+        $set: {
+          ...normalized,
+          referenceDocumentUrl,
+        },
+      },
+      {
+        new: true,
+      }
+    ).lean();
+
+    const submissions = await Submission.find({ assignmentId })
+      .populate('studentId', 'fullName studentId email')
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    const submissionItems = await Promise.all(
+      submissions.map((submission) => submissionListItem(submission))
+    );
+
+    return res.json({
+      assignment: await assignmentListItem(updated, submissionItems),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function listAdminAssignments(req, res, next) {
   try {
     const limit = Math.min(100, Math.max(1, Number(req.query.limit || 25)));

@@ -11,6 +11,7 @@ import {
   createAssignment,
   fetchAdminAssignments,
   fetchAssignmentHierarchy,
+  updateAssignment,
 } from '../../services/assignments.service.js';
 
 const COURSES = [
@@ -67,7 +68,9 @@ function formatDeadline(value) {
   }).format(date);
 }
 
-export default function UploadAssignment() {
+export default function UploadAssignment({ admin }) {
+  const isSuperAdmin = String(admin?.role || '') === 'superadmin';
+
   const [branches, setBranches] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -83,6 +86,8 @@ export default function UploadAssignment() {
   const [description, setDescription] = useState('');
   const [deadline, setDeadline] = useState('');
   const [referenceDocument, setReferenceDocument] = useState(null);
+  const [editingAssignmentId, setEditingAssignmentId] = useState('');
+  const [existingReferenceDocumentUrl, setExistingReferenceDocumentUrl] = useState('');
 
   const batchOptions = useMemo(() => buildBatchOptions(branches, branchId), [branches, branchId]);
   const selectedBatch = useMemo(
@@ -155,6 +160,40 @@ export default function UploadAssignment() {
     setDescription('');
     setDeadline('');
     setReferenceDocument(null);
+    setEditingAssignmentId('');
+    setExistingReferenceDocumentUrl('');
+  }
+
+  function toDateTimeInputValue(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+
+    const pad = (num) => String(num).padStart(2, '0');
+    const yyyy = date.getFullYear();
+    const mm = pad(date.getMonth() + 1);
+    const dd = pad(date.getDate());
+    const hh = pad(date.getHours());
+    const min = pad(date.getMinutes());
+
+    return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+  }
+
+  function startEditing(assignment) {
+    if (!isSuperAdmin) {
+      return;
+    }
+
+    setEditingAssignmentId(String(assignment?.id || ''));
+    setBranchId(String(assignment?.branchId || ''));
+    setBatchId(String(assignment?.batchId || ''));
+    setCourse(String(assignment?.course || ''));
+    setTitle(String(assignment?.title || ''));
+    setDescription(String(assignment?.description || ''));
+    setDeadline(toDateTimeInputValue(assignment?.deadline));
+    setReferenceDocument(null);
+    setExistingReferenceDocumentUrl(String(assignment?.referenceDocumentUrl || ''));
+    setError('');
+    setToast('Editing mode enabled. Update and save changes.');
   }
 
   async function handleSubmit(event) {
@@ -168,7 +207,7 @@ export default function UploadAssignment() {
 
     setSubmitting(true);
     try {
-      await createAssignment({
+      const payload = {
         branchId,
         batchId,
         course,
@@ -176,12 +215,21 @@ export default function UploadAssignment() {
         description: description.trim(),
         deadline,
         referenceDocument,
-      });
+        referenceDocumentUrl: existingReferenceDocumentUrl,
+      };
+
+      if (editingAssignmentId) {
+        await updateAssignment(editingAssignmentId, payload);
+        setToast('Assignment updated successfully.');
+      } else {
+        await createAssignment(payload);
+        setToast('Assignment published successfully.');
+      }
+
       resetForm();
-      setToast('Assignment published successfully.');
       await loadAssignments();
     } catch (err) {
-      setError(err.message || 'Failed to create assignment.');
+      setError(err.message || (editingAssignmentId ? 'Failed to update assignment.' : 'Failed to create assignment.'));
     } finally {
       setSubmitting(false);
     }
@@ -197,6 +245,19 @@ export default function UploadAssignment() {
       </section>
 
       <form onSubmit={handleSubmit} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        {editingAssignmentId ? (
+          <div className="mb-4 flex items-center justify-between rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <span>Editing assignment details.</span>
+            <button
+              type="button"
+              onClick={resetForm}
+              className="rounded-lg border border-amber-300 px-3 py-1.5 font-semibold text-amber-800 hover:bg-amber-100"
+            >
+              Cancel Edit
+            </button>
+          </div>
+        ) : null}
+
         <div className="grid gap-4 md:grid-cols-3">
           <label className="space-y-1">
             <span className="text-sm font-semibold text-[#0b2948]">Branch</span>
@@ -298,6 +359,16 @@ export default function UploadAssignment() {
             onChange={(event) => setReferenceDocument(event.target.files?.[0] || null)}
           />
           {referenceDocument ? <p className="mt-2 text-xs text-slate-600">Selected: {referenceDocument.name}</p> : null}
+          {!referenceDocument && existingReferenceDocumentUrl ? (
+            <a
+              href={existingReferenceDocumentUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-flex text-xs font-semibold text-sky-700 hover:text-sky-800"
+            >
+              Keep existing reference document
+            </a>
+          ) : null}
         </label>
 
         {error ? <p className="mt-3 text-sm font-medium text-rose-600">{error}</p> : null}
@@ -309,7 +380,7 @@ export default function UploadAssignment() {
             className="inline-flex items-center gap-2 rounded-xl bg-[#0b2948] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#081f36] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            {submitting ? 'Publishing...' : 'Publish Assignment'}
+            {submitting ? (editingAssignmentId ? 'Saving...' : 'Publishing...') : (editingAssignmentId ? 'Save Changes' : 'Publish Assignment')}
           </button>
         </div>
       </form>
@@ -352,6 +423,17 @@ export default function UploadAssignment() {
                       >
                         Open reference document
                       </a>
+                    ) : null}
+                    {isSuperAdmin ? (
+                      <div className="mt-3">
+                        <button
+                          type="button"
+                          onClick={() => startEditing(assignment)}
+                          className="inline-flex rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                        >
+                          Edit Assignment
+                        </button>
+                      </div>
                     ) : null}
                   </div>
 

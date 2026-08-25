@@ -37,7 +37,8 @@ export function requireSuperAdmin(action) {
     'MANAGE_SETTINGS',
     'MANAGE_FACULTIES',
     'MANAGE_PROGRAMS',
-    'MANAGE_INTAKES'
+    'MANAGE_INTAKES',
+    'EDIT_ASSIGNMENTS',
   ];
   return superAdminActions.includes(action);
 }

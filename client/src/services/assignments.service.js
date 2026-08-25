@@ -51,6 +51,40 @@ export async function createAssignment(payload) {
   return response.json();
 }
 
+export async function updateAssignment(assignmentId, payload) {
+  const apiBase = await getApiBaseUrl();
+  const formData = new globalThis.FormData();
+
+  formData.append('branchId', payload.branchId);
+  formData.append('batchId', payload.batchId);
+  formData.append('course', payload.course);
+  formData.append('title', payload.title);
+  formData.append('description', payload.description);
+  formData.append('deadline', payload.deadline);
+
+  if (payload.referenceDocumentUrl) {
+    formData.append('referenceDocumentUrl', payload.referenceDocumentUrl);
+  }
+
+  if (payload.referenceDocument) {
+    formData.append('referenceDocument', payload.referenceDocument);
+  }
+
+  const response = await fetch(joinApiUrl(apiBase, `/api/admin/assignments/${encodeURIComponent(String(assignmentId || ''))}`), {
+    method: 'PUT',
+    credentials: 'include',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const payloadError = await response.json().catch(() => ({}));
+    const errors = Array.isArray(payloadError?.errors) ? payloadError.errors.filter(Boolean) : [];
+    throw new Error(errors[0] || payloadError?.message || 'Failed to update assignment.');
+  }
+
+  return response.json();
+}
+
 export async function fetchStudentAssignments() {
   const response = await apiGet('/api/student/assignments');
   return Array.isArray(response?.assignments) ? response.assignments : [];
