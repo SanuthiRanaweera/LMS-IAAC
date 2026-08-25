@@ -73,7 +73,7 @@ function validateStudentId(studentId, branchId, batchId) {
   const allowedPrefixesByBranch = {
     city: ['CC', 'GO', 'TR', 'CG'],
     airport: ['CCR', 'GOR', 'TRR', 'CGR'],
-    central: ['GOK', 'TRK', 'CGK'],
+    central: ['CCK', 'GOK', 'TRK', 'CGK'],
   };
 
   const allowedPrefixes = allowedPrefixesByBranch[branchType] || [];
