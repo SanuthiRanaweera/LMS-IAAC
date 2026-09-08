@@ -86,10 +86,11 @@ jobs:
           script: |
             set -e
             cd /opt/lms-app/LMS-IAAC
-            git pull origin main
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+            git fetch origin main
+            git reset --hard origin/main
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build --force-recreate
             docker image prune -f
-            docker compose ps
+            docker compose ps --format 'table {{.Name}}\t{{.Status}}'
             echo "✅ Deployment complete!"
 
       - name: Notify success
