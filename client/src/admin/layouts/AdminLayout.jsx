@@ -73,17 +73,19 @@ export default function AdminLayout() {
   }
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-slate-50 text-slate-900">
+    <div className="min-h-screen overflow-x-hidden bg-[#f5f7fa] text-slate-900">
       <div className="min-h-screen md:flex">
         <AdminSidebar
           admin={admin}
           onLogout={onLogout}
+          dark={false}
         />
 
         <div className="min-w-0 flex-1">
           <AdminTopbar
             admin={admin}
             onLogout={onLogout}
+            dark={false}
           />
 
           <main className="w-full max-w-full px-4 py-5 sm:px-5 md:px-6">

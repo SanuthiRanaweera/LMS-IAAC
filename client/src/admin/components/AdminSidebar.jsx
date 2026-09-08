@@ -102,7 +102,7 @@ const NAV = [
    ADMIN SIDEBAR
 ========================================================= */
 
-export default function AdminSidebar({ admin }) {
+export default function AdminSidebar({ admin, dark = false }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const location = useLocation();
@@ -213,18 +213,18 @@ export default function AdminSidebar({ admin }) {
   ======================================================= */
 
   const SidebarHeader = () => (
-    <div className="border-b border-slate-200 px-5 py-4">
+    <div className={`border-b px-5 py-4 ${dark ? 'border-white/10' : 'border-slate-200'}`}>
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#003580] text-sm font-bold text-white shadow-sm">
           IA
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-bold text-slate-900">
+          <div className={`truncate text-sm font-bold ${dark ? 'text-white' : 'text-slate-900'}`}>
             IAAC Admin
           </div>
 
-          <div className="truncate text-xs font-semibold text-slate-500">
+          <div className={`truncate text-xs font-semibold ${dark ? 'text-white/45' : 'text-slate-500'}`}>
             {adminName}
           </div>
         </div>
@@ -249,11 +249,11 @@ export default function AdminSidebar({ admin }) {
   const LimitedRoleNotice = () =>
     limitedRole ? (
       <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-3">
-        <div className="mb-1 text-xs font-bold text-blue-700">
+            <div className={`mb-1 text-xs font-bold ${dark ? 'text-sky-300' : 'text-blue-700'}`}>
           Limited Role
         </div>
 
-        <p className="text-[11px] leading-relaxed text-blue-600">
+        <p className={`text-[11px] leading-relaxed ${dark ? 'text-white/55' : 'text-blue-600'}`}>
           You can manage allowed academic content,
           schedules, assignments and student results,
           but some administrative features are restricted.
@@ -294,8 +294,8 @@ export default function AdminSidebar({ admin }) {
                       item,
                       isActive
                     )
-                      ? 'bg-sky-50 text-sky-700'
-                      : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
+                      ? dark ? 'bg-sky-400/15 text-sky-300' : 'bg-sky-50 text-sky-700'
+                      : dark ? 'text-white/55 hover:bg-white/5 hover:text-white' : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
                   ].join(' ')
                 }
               >
@@ -340,18 +340,18 @@ export default function AdminSidebar({ admin }) {
           MOBILE TOP BAR
       =============================================== */}
 
-      <div className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm md:hidden">
+      <div className={`sticky top-0 z-40 flex h-16 items-center justify-between border-b px-4 shadow-sm md:hidden ${dark ? 'border-white/10 bg-[#101010]' : 'border-slate-200 bg-white'}`}>
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#003580] text-sm font-bold text-white shadow-sm">
             IA
           </div>
 
           <div className="min-w-0">
-            <div className="truncate text-sm font-bold text-slate-900">
+            <div className={`truncate text-sm font-bold ${dark ? 'text-white' : 'text-slate-900'}`}>
               IAAC Admin
             </div>
 
-            <div className="truncate text-xs font-semibold text-slate-500">
+            <div className={`truncate text-xs font-semibold ${dark ? 'text-white/45' : 'text-slate-500'}`}>
               {adminName}
             </div>
           </div>
@@ -362,7 +362,7 @@ export default function AdminSidebar({ admin }) {
           onClick={() =>
             setMobileOpen(true)
           }
-          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
+          className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-sm transition-colors ${dark ? 'border-white/10 bg-white/5 text-white hover:bg-white/10' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
           aria-label="Open admin menu"
         >
           <Menu className="h-5 w-5" />
@@ -373,7 +373,7 @@ export default function AdminSidebar({ admin }) {
           DESKTOP SIDEBAR
       =============================================== */}
 
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 overflow-y-auto border-r border-slate-200 bg-white md:block">
+      <aside className={`sticky top-0 hidden h-screen w-64 shrink-0 overflow-y-auto border-r md:block ${dark ? 'border-white/10 bg-[#101010]' : 'border-slate-200 bg-white'}`}>
         <SidebarContent />
       </aside>
 
@@ -394,9 +394,9 @@ export default function AdminSidebar({ admin }) {
           />
 
           {/* Drawer */}
-          <aside className="absolute left-0 top-0 h-full w-72 max-w-[86vw] overflow-y-auto bg-white shadow-2xl">
-            <div className="flex h-14 items-center justify-between border-b border-slate-200 px-4">
-              <span className="text-sm font-bold text-slate-900">
+          <aside className={`absolute left-0 top-0 h-full w-72 max-w-[86vw] overflow-y-auto shadow-2xl ${dark ? 'bg-[#101010]' : 'bg-white'}`}>
+            <div className={`flex h-14 items-center justify-between border-b px-4 ${dark ? 'border-white/10' : 'border-slate-200'}`}>
+              <span className={`text-sm font-bold ${dark ? 'text-white' : 'text-slate-900'}`}>
                 Admin Menu
               </span>
 
@@ -405,7 +405,7 @@ export default function AdminSidebar({ admin }) {
                 onClick={
                   closeMobileMenu
                 }
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-50"
+                className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${dark ? 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
                 aria-label="Close admin menu"
               >
                 <X className="h-5 w-5" />

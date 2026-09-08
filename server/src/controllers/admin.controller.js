@@ -370,10 +370,26 @@ async function getBranchStudentCounts() {
         {
           $group: {
             _id: {
-              $ifNull: [
-                '$branchId',
-                '',
-              ],
+              branchId: {
+                $ifNull: [
+                  '$branchId',
+                  '',
+                ],
+              },
+
+              batchId: {
+                $ifNull: [
+                  '$batchId',
+                  '',
+                ],
+              },
+
+              intakeId: {
+                $ifNull: [
+                  '$intakeId',
+                  '',
+                ],
+              },
             },
 
             count: {
@@ -387,21 +403,49 @@ async function getBranchStudentCounts() {
   const countMap =
     new Map();
 
+  const batchCountMap =
+    new Map();
+
+  const intakeCountMap =
+    new Map();
+
   for (
     const item of
     groupedStudents
   ) {
     const branchId =
       normalizeId(
-        item?._id
+        item?._id?.branchId
       );
 
-    countMap.set(
-      branchId,
+    const batchId =
+      normalizeId(
+        item?._id?.batchId
+      );
+
+    const intakeId =
+      normalizeId(
+        item?._id?.intakeId
+      );
+
+    const studentCount =
       Number(
         item?.count || 0
-      )
-    );
+      );
+
+    countMap.set(branchId, (countMap.get(branchId) || 0) + studentCount);
+
+    if (batchId) {
+      const batches = batchCountMap.get(branchId) || new Map();
+      batches.set(batchId, (batches.get(batchId) || 0) + studentCount);
+      batchCountMap.set(branchId, batches);
+    }
+
+    if (intakeId) {
+      const intakes = intakeCountMap.get(branchId) || new Map();
+      intakes.set(intakeId, (intakes.get(intakeId) || 0) + studentCount);
+      intakeCountMap.set(branchId, intakes);
+    }
   }
 
   const branches =
@@ -412,6 +456,43 @@ async function getBranchStudentCounts() {
       ? academicsPayload
           .branches
       : [];
+
+  const batchNameMap = new Map();
+  const intakeNameMap = new Map();
+
+  for (const branch of branches) {
+    const intakes = Array.isArray(branch?.intakes) ? branch.intakes : [];
+
+    for (const intake of intakes) {
+      const intakeId = normalizeId(
+        intake?.id ||
+          intake?._id ||
+          intake?.key ||
+          intake?.code ||
+          intake?.name
+      );
+
+      if (intakeId) {
+        intakeNameMap.set(intakeId, safeTrim(intake?.name) || intakeId);
+      }
+
+      const batches = Array.isArray(intake?.batches) ? intake.batches : [];
+
+      for (const batch of batches) {
+        const batchId = normalizeId(
+          batch?.id ||
+            batch?._id ||
+            batch?.key ||
+            batch?.code ||
+            batch?.name
+        );
+
+        if (batchId) {
+          batchNameMap.set(batchId, safeTrim(batch?.name) || batchId);
+        }
+      }
+    }
+  }
 
   const result = [];
 
@@ -456,6 +537,24 @@ async function getBranchStudentCounts() {
         countMap.get(
           branchId
         ) || 0,
+
+      batches: Array.from(
+        batchCountMap.get(branchId) || [],
+        ([batchId, studentCount]) => ({
+          batchId,
+          batchName: batchNameMap.get(batchId) || batchId,
+          studentCount,
+        })
+      ),
+
+      intakes: Array.from(
+        intakeCountMap.get(branchId) || [],
+        ([intakeId, studentCount]) => ({
+          intakeId,
+          intakeName: intakeNameMap.get(intakeId) || intakeId,
+          studentCount,
+        })
+      ),
     });
   }
 
@@ -481,6 +580,24 @@ async function getBranchStudentCounts() {
         branchId,
 
       studentCount,
+
+      batches: Array.from(
+        batchCountMap.get(branchId) || [],
+        ([batchId, batchStudentCount]) => ({
+          batchId,
+          batchName: batchNameMap.get(batchId) || batchId,
+          studentCount: batchStudentCount,
+        })
+      ),
+
+      intakes: Array.from(
+        intakeCountMap.get(branchId) || [],
+        ([intakeId, studentCount]) => ({
+          intakeId,
+          intakeName: intakeNameMap.get(intakeId) || intakeId,
+          studentCount,
+        })
+      ),
     });
   }
 
