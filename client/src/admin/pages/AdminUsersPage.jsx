@@ -35,7 +35,7 @@ export default function AdminUsersPage() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'staff', branchId: '', intakeId: '', batchId: '', canUpdateResults: false });
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'staff', branchId: '', intakeId: '', batchId: '' });
 
   // Cascading dropdowns for lecturer assignment
   const [branches, setBranches] = useState([]);
@@ -68,7 +68,7 @@ export default function AdminUsersPage() {
 
   // Edit functionality
   const [editing, setEditing] = useState(null);
-  const [editForm, setEditForm] = useState({ name: '', email: '', password: '', canUpdateResults: false });
+  const [editForm, setEditForm] = useState({ name: '', email: '', password: '' });
   const [editError, setEditError] = useState('');
   const [editLoading, setEditLoading] = useState(false);
   const [showEditPassword, setShowEditPassword] = useState(false);
@@ -108,7 +108,7 @@ export default function AdminUsersPage() {
     if (form.role === 'lecturer') payload.mustChangePassword = true;
     apiPost('/api/admin/users', payload)
       .then(() => {
-        setForm({ name: '', email: '', password: '', role: 'staff', branchId: '', intakeId: '', batchId: '', canUpdateResults: false });
+        setForm({ name: '', email: '', password: '', role: 'staff', branchId: '', intakeId: '', batchId: '' });
         setCreateOpen(false);
         load();
       })
@@ -128,7 +128,6 @@ export default function AdminUsersPage() {
       name: user.name,
       email: user.email,
       password: '', // Leave blank for no password change
-      canUpdateResults: user.canUpdateResults === true,
     });
     setEditError('');
     setShowEditPassword(false);
@@ -142,7 +141,6 @@ export default function AdminUsersPage() {
     const updateData = {
       name: editForm.name,
       email: editForm.email,
-      canUpdateResults: editForm.canUpdateResults,
     };
 
     // Only include password if it's been entered
@@ -153,7 +151,7 @@ export default function AdminUsersPage() {
     try {
       await apiPut(`/api/admin/users/${editing}`, updateData);
       setEditing(null);
-      setEditForm({ name: '', email: '', password: '', canUpdateResults: false });
+      setEditForm({ name: '', email: '', password: '' });
       load();
     } catch (e) {
       if (e instanceof ApiError && e.status === 403) {
@@ -190,7 +188,7 @@ export default function AdminUsersPage() {
 
   const cancelEdit = () => {
     setEditing(null);
-    setEditForm({ name: '', email: '', password: '', canUpdateResults: false });
+    setEditForm({ name: '', email: '', password: '' });
     setEditError('');
   };
 
@@ -223,7 +221,7 @@ export default function AdminUsersPage() {
           <div className="border-t border-slate-100 px-5 pb-5 pt-4">
             <p className="text-xs text-slate-500">
               Staff Admin and Lecturer accounts have limited permissions — they can add materials and schedules but
-              cannot manage users. Result updates can be granted below.
+              cannot edit, delete, or manage users.
             </p>
 
             {createError ? (
@@ -363,19 +361,6 @@ export default function AdminUsersPage() {
                 ) : null}
               </div>
 
-              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <input
-                  type="checkbox"
-                  checked={form.canUpdateResults}
-                  onChange={(e) => setForm((f) => ({ ...f, canUpdateResults: e.target.checked }))}
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-sky-700 focus:ring-sky-500"
-                />
-                <span>
-                  <span className="block text-sm font-semibold text-slate-800">Allow result updates</span>
-                  <span className="block text-xs text-slate-500">Can create, edit, publish, unpublish, and delete results.</span>
-                </span>
-              </label>
-
               <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
                 <button
                   type="button"
@@ -434,7 +419,6 @@ export default function AdminUsersPage() {
                     <th className="py-2">User</th>
                     <th className="py-2">Email</th>
                     <th className="py-2">Role</th>
-                    <th className="py-2">Results</th>
                     <th className="py-2">Created</th>
                     <th className="py-2 text-right">Actions</th>
                   </tr>
@@ -452,9 +436,6 @@ export default function AdminUsersPage() {
                             </div>
                             <span className="font-semibold break-words">{u.name}</span>
                           </div>
-                        </td>
-                        <td className="py-3 text-xs text-slate-500">
-                          {u.role === 'superadmin' || u.canUpdateResults ? 'Can update' : 'View only'}
                         </td>
                         <td className="py-3 break-all text-slate-600">{u.email}</td>
                         <td className="py-3">
@@ -525,19 +506,6 @@ export default function AdminUsersPage() {
                     required
                   />
                 </div>
-
-                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <input
-                    type="checkbox"
-                    checked={editForm.canUpdateResults}
-                    onChange={(e) => setEditForm((f) => ({ ...f, canUpdateResults: e.target.checked }))}
-                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-sky-700 focus:ring-sky-500"
-                  />
-                  <span>
-                    <span className="block text-sm font-semibold text-slate-800">Allow result updates</span>
-                    <span className="block text-xs text-slate-500">Can create, edit, publish, unpublish, and delete results.</span>
-                  </span>
-                </label>
 
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-slate-600">Email *</label>

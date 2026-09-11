@@ -132,11 +132,7 @@ export default function App() {
 
           <Route
             path="results"
-            element={
-              <RequireAdminRole allow="superadmin" permission="canUpdateResults">
-                <AdminResultsPage />
-              </RequireAdminRole>
-            }
+            element={<AdminResultsPage />}
           />
 
           {/* ================= BRANCHES ================= */}

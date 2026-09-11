@@ -13,7 +13,6 @@ function toAdminMePayload(admin) {
     name: admin.name,
     email: admin.email,
     role,
-    canUpdateResults: admin.canUpdateResults === true,
   };
 }
 

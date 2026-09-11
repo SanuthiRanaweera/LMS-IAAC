@@ -39,7 +39,6 @@ export function requireSuperAdmin(action) {
     'MANAGE_PROGRAMS',
     'MANAGE_INTAKES',
     'EDIT_ASSIGNMENTS',
-    'UPDATE_RESULTS',
   ];
   return superAdminActions.includes(action);
 }
@@ -158,7 +157,7 @@ export function requireAdminForAppDataKey(options = {}) {
 
 // Enhanced role checking with action-based permissions
 export function requirePermission(action) {
-  return async (req, res, next) => {
+  return (req, res, next) => {
     const role = getEffectiveAdminRole(req.adminAuth);
     const adminId = req.adminAuth?.id;
 
@@ -170,14 +169,6 @@ export function requirePermission(action) {
     }
 
     if (role === 'staff' || role === 'lecturer') {
-      if (action === 'UPDATE_RESULTS') {
-        const admin = await Admin.findById(adminId).select('canUpdateResults').lean();
-        if (admin?.canUpdateResults === true) {
-          logAdminAction(adminId, action, { role });
-          return next();
-        }
-      }
-
       if (isStaffAllowedAction(action)) {
         logAdminAction(adminId, action, { role });
         return next();

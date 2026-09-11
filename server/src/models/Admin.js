@@ -24,7 +24,6 @@ const AdminSchema = new Schema(
     branchId: { type: String, trim: true, default: '' },
     intakeId: { type: String, trim: true, default: '' },
     batchId:  { type: String, trim: true, default: '' },
-    canUpdateResults: { type: Boolean, default: false },
     mustChangePassword: { type: Boolean, default: false },
   },
   { timestamps: true }
