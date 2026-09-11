@@ -7,8 +7,6 @@ import {
   apiDelete,
 } from '../../api/http.js';
 
-import { getAcademics } from '../../services/academicsAdmin.service.js';
-
 const COURSES = [
   'Cabin Crew',
   'Ground Operations',
@@ -169,16 +167,16 @@ export default function ResultsPage() {
       setError('');
 
       try {
-        const response = await getAcademics();
+        const response = await apiGet('/api/materials/hierarchy/full');
 
         if (cancelled) {
           return;
         }
 
         const loadedBranches = Array.isArray(
-          response?.payload?.branches
+          response?.branches
         )
-          ? response.payload.branches
+          ? response.branches
           : [];
 
         setBranches(loadedBranches);

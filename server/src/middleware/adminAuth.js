@@ -160,7 +160,7 @@ export function requireAdminForAppDataKey(options = {}) {
 export function requirePermission(action) {
   return async (req, res, next) => {
     const role = getEffectiveAdminRole(req.adminAuth);
-    const adminId = req.adminAuth?.id;
+    const adminId = req.adminAuth?.sub || req.adminAuth?.id;
 
     if (role === 'superadmin') {
       if (requireSuperAdmin(action)) {
