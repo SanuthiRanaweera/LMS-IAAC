@@ -339,6 +339,7 @@ function toAdminListItem(
       admin.email,
 
     role,
+    canUpdateResults: admin.canUpdateResults === true,
 
     createdAt:
       admin.createdAt,
@@ -783,6 +784,7 @@ export async function createStaffUser(
       branchId,
       intakeId,
       batchId,
+      canUpdateResults,
       mustChangePassword,
     } = req.body || {};
 
@@ -905,6 +907,9 @@ export async function createStaffUser(
           safeTrim(
             batchId
           ),
+
+        canUpdateResults:
+          canUpdateResults === true,
 
         mustChangePassword:
           mustChangePassword ===
@@ -2481,6 +2486,7 @@ export async function editStaffUser(
       name,
       email,
       password,
+      canUpdateResults,
     } = req.body || {};
 
     if (!id) {
@@ -2599,6 +2605,10 @@ export async function editStaffUser(
           password.trim(),
           12
         );
+    }
+
+    if (canUpdateResults !== undefined) {
+      updateData.canUpdateResults = canUpdateResults === true;
     }
 
     const updated =

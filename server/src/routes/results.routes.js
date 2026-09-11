@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import {
   requireAdminRole,
+  requirePermission,
 } from '../middleware/adminAuth.js';
 
 import {
@@ -81,7 +82,7 @@ Example body:
 */
 resultsRouter.post(
   '/',
-  requireAdminRole(['superadmin', 'staff']),
+  requirePermission('UPDATE_RESULTS'),
   createResult
 );
 
@@ -118,7 +119,7 @@ PUT /api/results/:id/publish
 */
 resultsRouter.put(
   '/:id/publish',
-  requireAdminRole(['superadmin', 'staff']),
+  requirePermission('UPDATE_RESULTS'),
   publishResult
 );
 
@@ -131,7 +132,7 @@ PUT /api/results/:id/unpublish
 */
 resultsRouter.put(
   '/:id/unpublish',
-  requireAdminRole(['superadmin', 'staff']),
+  requirePermission('UPDATE_RESULTS'),
   unpublishResult
 );
 
@@ -157,7 +158,7 @@ PUT /api/results/:id
 */
 resultsRouter.put(
   '/:id',
-  requireAdminRole(['superadmin', 'staff']),
+  requirePermission('UPDATE_RESULTS'),
   updateResult
 );
 
@@ -170,6 +171,6 @@ DELETE /api/results/:id
 */
 resultsRouter.delete(
   '/:id',
-  requireAdminRole(['superadmin', 'staff']),
+  requirePermission('UPDATE_RESULTS'),
   deleteResult
 );
