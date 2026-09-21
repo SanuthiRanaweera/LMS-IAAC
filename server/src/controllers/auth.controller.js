@@ -194,6 +194,51 @@ function makeResetToken() {
 }
 
 /* =========================================================
+   OTP RESEND COOLDOWN
+
+   The send-otp and forgot-password endpoints are public and
+   unauthenticated, and each call triggers a real outbound
+   email. Without a cooldown, rapid repeated requests (a user
+   double-clicking "resend", or automated abuse) fire multiple
+   emails per second with no limit, which both wastes send
+   quota and increases the chance the sending account gets
+   flagged by the mail provider's spam/abuse detection -
+   degrading deliverability for everyone, not just the abuser.
+========================================================= */
+
+const OTP_RESEND_COOLDOWN_SECONDS = 45;
+
+async function assertOtpResendCooldown(email) {
+  const existing =
+    await Otp.findOne({ email })
+      .select('createdAt')
+      .lean();
+
+  if (!existing) {
+    return;
+  }
+
+  const ageSeconds =
+    (Date.now() -
+      new Date(existing.createdAt).getTime()) /
+    1000;
+
+  if (ageSeconds < OTP_RESEND_COOLDOWN_SECONDS) {
+    const waitSeconds = Math.ceil(
+      OTP_RESEND_COOLDOWN_SECONDS - ageSeconds
+    );
+
+    const err = new Error(
+      `Please wait ${waitSeconds}s before requesting another code.`
+    );
+
+    err.status = 429;
+
+    throw err;
+  }
+}
+
+/* =========================================================
    MAIL TRANSPORT
 ========================================================= */
 
@@ -706,6 +751,23 @@ export async function sendRegistrationOtp(
           message:
             'Email is already registered',
         });
+    }
+
+    try {
+      await assertOtpResendCooldown(
+        normalizedEmail
+      );
+    } catch (cooldownErr) {
+      if (cooldownErr.status === 429) {
+        return res
+          .status(429)
+          .json({
+            message:
+              cooldownErr.message,
+          });
+      }
+
+      throw cooldownErr;
     }
 
     const otp =
@@ -2184,6 +2246,23 @@ export async function forgotStudentPassword(
         message:
           'If an account exists, a reset code has been prepared.',
       });
+    }
+
+    try {
+      await assertOtpResendCooldown(
+        student.email
+      );
+    } catch (cooldownErr) {
+      if (cooldownErr.status === 429) {
+        return res
+          .status(429)
+          .json({
+            message:
+              cooldownErr.message,
+          });
+      }
+
+      throw cooldownErr;
     }
 
     const otp =
