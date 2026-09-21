@@ -23,6 +23,9 @@ async function connectInMemoryDb() {
 export async function connectDb() {
   const mongoUri = process.env.MONGODB_URI;
   if (!mongoUri) {
+    if (process.env.MONGODB_REQUIRED === 'true') {
+      throw new Error('MONGODB_URI is required but was not set.');
+    }
     return connectInMemoryDb();
   }
 
