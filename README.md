@@ -81,4 +81,4 @@ Inside `server/src/` you already have folders for:
 - `routes/` + `controllers/`
 - `middleware/` (auth, roles, error handling)
 
-<!-- deploy-test: 2026-09-21T16:02:29Z (verifying VPS auto-restart on push) -->
+<!-- deploy-test: 2026-09-21T16:10:36Z (re-verifying VPS auto-restart) -->
