@@ -80,3 +80,5 @@ Inside `server/src/` you already have folders for:
 - `models/` (User, Course, Enrollment, Lesson, Assignment, Submission)
 - `routes/` + `controllers/`
 - `middleware/` (auth, roles, error handling)
+
+<!-- deploy-test: 2026-09-21T16:02:29Z (verifying VPS auto-restart on push) -->
