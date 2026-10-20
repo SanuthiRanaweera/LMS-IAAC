@@ -225,10 +225,6 @@ export default function StudentResultsPage() {
                   </th>
 
                   <th className="px-5 py-3 text-left text-sm font-semibold text-slate-700">
-                    Grade
-                  </th>
-
-                  <th className="px-5 py-3 text-left text-sm font-semibold text-slate-700">
                     Status
                   </th>
 
@@ -265,11 +261,6 @@ export default function StudentResultsPage() {
 
                       <td className="px-5 py-4 text-sm font-bold text-slate-900">
                         {result.marks ??
-                          '-'}
-                      </td>
-
-                      <td className="px-5 py-4 text-sm font-bold text-slate-900">
-                        {result.grade ||
                           '-'}
                       </td>
 

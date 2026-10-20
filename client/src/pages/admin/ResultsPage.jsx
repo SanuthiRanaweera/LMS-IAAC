@@ -86,28 +86,6 @@ export default function ResultsPage() {
     );
   }
 
-  function calculateGrade(marks) {
-    if (
-      marks === '' ||
-      marks === null ||
-      marks === undefined
-    ) {
-      return '';
-    }
-
-    const value = Number(marks);
-
-    if (Number.isNaN(value)) {
-      return '';
-    }
-
-    if (value >= 75) return 'A';
-    if (value >= 65) return 'B';
-    if (value >= 55) return 'C';
-    if (value >= 40) return 'S';
-
-    return 'F';
-  }
 
   function calculateStatus(marks) {
     if (
@@ -419,7 +397,6 @@ export default function ResultsPage() {
             studentName: student.fullName,
 
             marks: '',
-            grade: '',
             status: 'PENDING',
             remarks: '',
           }))
@@ -494,9 +471,6 @@ export default function ResultsPage() {
               ...row,
 
               marks: value,
-
-              grade:
-                calculateGrade(value),
 
               status:
                 calculateStatus(value),
@@ -587,11 +561,6 @@ export default function ResultsPage() {
           : row.marks === ''
             ? null
             : Number(row.marks),
-
-      grade:
-        row.status === 'ABSENT'
-          ? ''
-          : String(row.grade || '').trim(),
 
       status:
         row.status,
@@ -772,9 +741,6 @@ export default function ResultsPage() {
               row.marks === undefined
                 ? ''
                 : String(row.marks),
-
-            grade:
-              row.grade || '',
 
             status:
               row.status ||
@@ -1074,7 +1040,7 @@ export default function ResultsPage() {
             </div>
 
             <p className="mt-1 text-xs text-blue-700">
-              Change the marks, grade, status, remarks, title or date and click Update Result.
+              Change the marks, status, remarks, title or date and click Update Result.
             </p>
           </div>
 
@@ -1390,10 +1356,6 @@ export default function ResultsPage() {
                 </th>
 
                 <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">
-                  Grade
-                </th>
-
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">
                   Status
                 </th>
 
@@ -1449,31 +1411,6 @@ export default function ResultsPage() {
                       />
                     </td>
 
-                    {/* GRADE */}
-
-                    <td className="px-4 py-3">
-                      <input
-                        type="text"
-                        value={
-                          row.grade
-                        }
-                        disabled={
-                          row.status ===
-                          'ABSENT'
-                        }
-                        onChange={(
-                          event
-                        ) =>
-                          updateRow(
-                            index,
-                            'grade',
-                            event.target.value
-                          )
-                        }
-                        className="w-20 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
-                      />
-                    </td>
-
                     {/* STATUS */}
 
                     <td className="px-4 py-3">
@@ -1508,8 +1445,6 @@ export default function ResultsPage() {
                                         'ABSENT'
                                           ? {
                                               marks:
-                                                '',
-                                              grade:
                                                 '',
                                             }
                                           : {}),
@@ -1567,7 +1502,7 @@ export default function ResultsPage() {
               rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={5}
                     className="px-4 py-12 text-center text-sm font-medium text-slate-500"
                   >
                     Select Branch, Intake, Batch and Diploma to display students.
@@ -1578,7 +1513,7 @@ export default function ResultsPage() {
               {studentsLoading ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={5}
                     className="px-4 py-12 text-center text-sm font-medium text-slate-500"
                   >
                     Loading students...
