@@ -6,7 +6,9 @@ import {
   apiPut,
   apiDelete,
 } from '../../api/http.js';
+import { FileDown, ClipboardList } from 'lucide-react';
 import ResultsReportModal from '../../components/results/ResultsReportModal.jsx';
+import ResultsReportGenerator from '../../components/results/ResultsReportGenerator.jsx';
 
 const COURSES = [
   'Cabin Crew',
@@ -63,6 +65,7 @@ export default function ResultsPage() {
      REPORT GENERATOR
   ========================================================= */
 
+  const [activeTab, setActiveTab] = useState('manage'); // 'manage' | 'reports'
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportInitialFilters, setReportInitialFilters] = useState({});
 
@@ -1026,40 +1029,53 @@ export default function ResultsPage() {
   return (
     <div className="space-y-6">
       {/* =====================================================
-          PAGE HEADER
+          PAGE HEADER & TAB SWITCHER
       ===================================================== */}
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            Student Results
+            Examination Results & Reports
           </h1>
 
           <p className="mt-1 text-sm text-slate-600">
-            Select the student group, enter their results and publish them to the student portal.
+            Manage academic results and generate official examination reports.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setReportInitialFilters({
-              branchId,
-              intakeId,
-              batchId,
-              course,
-              resultTitle,
-            });
-            setIsReportModalOpen(true);
-          }}
-          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-700 via-blue-800 to-indigo-900 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:from-blue-800 hover:to-indigo-950 hover:shadow-md cursor-pointer"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <span>Generate Examination Report</span>
-        </button>
+        <div className="inline-flex rounded-xl border border-slate-200 bg-slate-100 p-1 text-xs font-bold text-slate-700 shadow-2xs">
+          <button
+            type="button"
+            onClick={() => setActiveTab('reports')}
+            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 transition cursor-pointer ${
+              activeTab === 'reports'
+                ? 'bg-white text-blue-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <FileDown className="h-4 w-4 text-blue-700" />
+            <span>Report Generator</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('manage')}
+            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 transition cursor-pointer ${
+              activeTab === 'manage'
+                ? 'bg-white text-blue-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <ClipboardList className="h-4 w-4 text-slate-600" />
+            <span>Enter & Publish Marks</span>
+          </button>
+        </div>
       </div>
+
+      {activeTab === 'reports' ? (
+        <ResultsReportGenerator initialFilters={reportInitialFilters} />
+      ) : (
+        <>
 
       {/* =====================================================
           EDITING NOTICE
@@ -1879,7 +1895,7 @@ export default function ResultsPage() {
                                   course: result.course,
                                   resultTitle: result.resultTitle,
                                 });
-                                setIsReportModalOpen(true);
+                                setActiveTab('reports');
                               }}
                               className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 cursor-pointer"
                               title="Generate PDF Examination Report"
@@ -1914,6 +1930,8 @@ export default function ResultsPage() {
           </div>
         )}
       </div>
+      </>
+      )}
 
       {/* =====================================================
           EXAMINATION RESULTS REPORT GENERATOR MODAL
