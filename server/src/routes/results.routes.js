@@ -16,7 +16,38 @@ import {
   getStudentPublishedResults,
 } from '../controllers/results.controller.js';
 
+import {
+  getReportFilters,
+  generateReportData,
+  previewReportData,
+} from '../controllers/report.controller.js';
+
 export const resultsRouter = Router();
+
+/* =========================================================
+   EXAMINATION RESULTS REPORTS (KEEP BEFORE /:id)
+========================================================= */
+
+// GET /api/results/reports/filters
+resultsRouter.get(
+  '/reports/filters',
+  requireAdminRole(['superadmin', 'staff']),
+  getReportFilters
+);
+
+// GET /api/results/reports/preview
+resultsRouter.get(
+  '/reports/preview',
+  requireAdminRole(['superadmin', 'staff']),
+  previewReportData
+);
+
+// POST /api/results/reports/data
+resultsRouter.post(
+  '/reports/data',
+  requireAdminRole(['superadmin', 'staff']),
+  generateReportData
+);
 
 /* =========================================================
    ADMIN / SUPERADMIN RESULT MANAGEMENT

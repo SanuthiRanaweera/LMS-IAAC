@@ -6,6 +6,7 @@ import {
   apiPut,
   apiDelete,
 } from '../../api/http.js';
+import ResultsReportModal from '../../components/results/ResultsReportModal.jsx';
 
 const COURSES = [
   'Cabin Crew',
@@ -59,6 +60,13 @@ export default function ResultsPage() {
   const [actionLoadingId, setActionLoadingId] = useState('');
 
   /* =========================================================
+     REPORT GENERATOR
+  ========================================================= */
+
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [reportInitialFilters, setReportInitialFilters] = useState({});
+
+  /* =========================================================
      UI STATE
   ========================================================= */
 
@@ -102,7 +110,7 @@ export default function ResultsPage() {
       return 'PENDING';
     }
 
-    return value >= 40 ? 'PASS' : 'FAIL';
+    return value >= 60 ? 'PASS' : 'FAIL';
   }
 
   function formatDate(value) {
@@ -743,8 +751,11 @@ export default function ResultsPage() {
                 : String(row.marks),
 
             status:
-              row.status ||
-              'PENDING',
+              row.status === 'ABSENT'
+                ? 'ABSENT'
+                : row.marks !== null && row.marks !== undefined && row.marks !== ''
+                  ? calculateStatus(row.marks)
+                  : row.status || 'PENDING',
 
             remarks:
               row.remarks || '',
@@ -1018,14 +1029,36 @@ export default function ResultsPage() {
           PAGE HEADER
       ===================================================== */}
 
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">
-          Student Results
-        </h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">
+            Student Results
+          </h1>
 
-        <p className="mt-1 text-sm text-slate-600">
-          Select the student group, enter their results and publish them to the student portal.
-        </p>
+          <p className="mt-1 text-sm text-slate-600">
+            Select the student group, enter their results and publish them to the student portal.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setReportInitialFilters({
+              branchId,
+              intakeId,
+              batchId,
+              course,
+              resultTitle,
+            });
+            setIsReportModalOpen(true);
+          }}
+          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-700 via-blue-800 to-indigo-900 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:from-blue-800 hover:to-indigo-950 hover:shadow-md cursor-pointer"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span>Generate Examination Report</span>
+        </button>
       </div>
 
       {/* =====================================================
@@ -1834,6 +1867,26 @@ export default function ResultsPage() {
                                 : 'Publish'}
                             </button>
 
+                            {/* REPORT */}
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReportInitialFilters({
+                                  branchId: result.branchId,
+                                  intakeId: result.intakeId,
+                                  batchId: result.batchId,
+                                  course: result.course,
+                                  resultTitle: result.resultTitle,
+                                });
+                                setIsReportModalOpen(true);
+                              }}
+                              className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 cursor-pointer"
+                              title="Generate PDF Examination Report"
+                            >
+                              Report
+                            </button>
+
                             {/* DELETE */}
 
                             <button
@@ -1861,6 +1914,15 @@ export default function ResultsPage() {
           </div>
         )}
       </div>
+
+      {/* =====================================================
+          EXAMINATION RESULTS REPORT GENERATOR MODAL
+      ===================================================== */}
+      <ResultsReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        initialFilters={reportInitialFilters}
+      />
     </div>
   );
 }

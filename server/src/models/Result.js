@@ -48,6 +48,11 @@ const StudentResultSchema = new Schema(
       default: 'PENDING',
     },
 
+    isResit: {
+      type: Boolean,
+      default: false,
+    },
+
     remarks: {
       type: String,
       trim: true,
