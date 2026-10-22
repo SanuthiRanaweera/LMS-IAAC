@@ -3,6 +3,11 @@ import mongoose from 'mongoose';
 import { Result } from '../models/Result.js';
 import { Student } from '../models/Student.js';
 import { logAdminAction } from '../middleware/adminAuth.js';
+import {
+  calculateGrade,
+  calculateFinalExamResult,
+  isRepeatEligible,
+} from '../utils/gradeCalculator.js';
 
 /* =========================================================
    HELPERS
@@ -328,14 +333,30 @@ export async function createResult(
         });
       }
 
+      const repeatMarksVal = parseMarks(row?.repeatMarks ?? row?.repeatScore);
+      const repeatGradeVal =
+        repeatMarksVal !== null
+          ? calculateGrade(repeatMarksVal)
+          : row?.repeatGrade
+            ? safeTrim(row.repeatGrade)
+            : null;
+      const isResitVal = Boolean(row?.isResit || repeatMarksVal !== null);
+      const finalResultVal = calculateFinalExamResult(marks, repeatMarksVal, row?.status);
+
       normalizedResults.push({
         student: student._id,
         studentId: student.studentId,
         studentName: student.fullName,
         marks,
-        grade: safeTrim(row?.grade),
+        grade: safeTrim(row?.grade) || calculateGrade(marks),
         status: normalizeStatus(row?.status),
         remarks: safeTrim(row?.remarks),
+        repeatMarks: repeatMarksVal,
+        repeatScore: repeatMarksVal,
+        repeatGrade: repeatGradeVal,
+        repeatDate: row?.repeatDate ? new Date(row.repeatDate) : null,
+        isResit: isResitVal,
+        finalResult: finalResultVal,
       });
     }
 
@@ -507,15 +528,27 @@ export async function getResultById(
         publishedAt: result.publishedAt || null,
 
         results: Array.isArray(result.results)
-          ? result.results.map((item) => ({
-              student: String(item.student),
-              studentId: item.studentId,
-              studentName: item.studentName,
-              marks: item.marks,
-              grade: item.grade || '',
-              status: item.status || 'PENDING',
-              remarks: item.remarks || '',
-            }))
+          ? result.results.map((item) => {
+              const repMarks = item.repeatMarks ?? item.repeatScore ?? null;
+              return {
+                student: String(item.student),
+                studentId: item.studentId,
+                studentName: item.studentName,
+                marks: item.marks,
+                grade: item.grade || calculateGrade(item.marks),
+                status: item.status || 'PENDING',
+                remarks: item.remarks || '',
+                repeatMarks: repMarks,
+                repeatScore: repMarks,
+                repeatGrade:
+                  item.repeatGrade || (repMarks !== null ? calculateGrade(repMarks) : null),
+                repeatDate: item.repeatDate || null,
+                isResit: Boolean(item.isResit || repMarks !== null),
+                finalResult:
+                  item.finalResult ||
+                  calculateFinalExamResult(item.marks, repMarks, item.status),
+              };
+            })
           : [],
 
         createdBy: result.createdBy
@@ -727,14 +760,30 @@ export async function updateResult(
           });
         }
 
+        const repeatMarksVal = parseMarks(row?.repeatMarks ?? row?.repeatScore);
+        const repeatGradeVal =
+          repeatMarksVal !== null
+            ? calculateGrade(repeatMarksVal)
+            : row?.repeatGrade
+              ? safeTrim(row.repeatGrade)
+              : null;
+        const isResitVal = Boolean(row?.isResit || repeatMarksVal !== null);
+        const finalResultVal = calculateFinalExamResult(marks, repeatMarksVal, row?.status);
+
         normalizedResults.push({
           student: student._id,
           studentId: student.studentId,
           studentName: student.fullName,
           marks,
-          grade: safeTrim(row?.grade),
+          grade: safeTrim(row?.grade) || calculateGrade(marks),
           status: normalizeStatus(row?.status),
           remarks: safeTrim(row?.remarks),
+          repeatMarks: repeatMarksVal,
+          repeatScore: repeatMarksVal,
+          repeatGrade: repeatGradeVal,
+          repeatDate: row?.repeatDate ? new Date(row.repeatDate) : null,
+          isResit: isResitVal,
+          finalResult: finalResultVal,
         });
       }
 
@@ -1179,6 +1228,142 @@ export async function getMyResults(
 
       count: results.length,
       results,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/* =========================================================
+   SAVE REPEAT EXAMINATION MARKS
+========================================================= */
+
+/**
+ * POST /api/results/:id/repeat-marks
+ * PUT /api/results/:id/repeat-marks
+ * Saves repeat examination marks for an eligible failed student.
+ */
+export async function saveRepeatMarks(req, res, next) {
+  try {
+    const id = String(req.params?.id || '').trim();
+    const { studentId, repeatMarks, repeatDate } = req.body || {};
+
+    if (!id || !isValidObjectId(id)) {
+      return res.status(400).json({ message: 'Valid result ID is required' });
+    }
+
+    const result = await Result.findById(id);
+    if (!result) {
+      return res.status(404).json({ message: 'Result sheet not found' });
+    }
+
+    if (!Array.isArray(result.results)) {
+      return res.status(404).json({ message: 'No student results found in this sheet' });
+    }
+
+    const cleanStudentId = String(studentId || '').trim();
+    if (!cleanStudentId) {
+      return res.status(400).json({ message: 'Student ID is required' });
+    }
+
+    // Match student entry by MongoDB _id or studentId registration string
+    const studentEntry = result.results.find(
+      (r) =>
+        String(r.student) === cleanStudentId ||
+        String(r.studentId).toLowerCase() === cleanStudentId.toLowerCase()
+    );
+
+    if (!studentEntry) {
+      return res.status(404).json({ message: 'Student not found in this result sheet' });
+    }
+
+    // 1. Eligibility check
+    if (studentEntry.status === 'ABSENT') {
+      return res.status(400).json({
+        message: 'Student was marked Absent. Repeat marks are only for students who attempted and failed the original examination.',
+      });
+    }
+
+    if (
+      studentEntry.marks === null ||
+      studentEntry.marks === undefined ||
+      studentEntry.marks === ''
+    ) {
+      return res.status(400).json({
+        message: 'Original examination marks must be entered before recording repeat marks.',
+      });
+    }
+
+    const origMarks = Number(studentEntry.marks);
+    if (!Number.isFinite(origMarks)) {
+      return res.status(400).json({ message: 'Invalid original examination marks.' });
+    }
+
+    if (origMarks >= 60) {
+      return res.status(400).json({
+        message: `Student scored ${origMarks} (Passed). Only students who scored below 60 in the original examination are eligible for a repeat examination.`,
+      });
+    }
+
+    // 2. Validate repeatMarks
+    const repNum = Number(repeatMarks);
+    if (
+      repeatMarks === null ||
+      repeatMarks === undefined ||
+      repeatMarks === '' ||
+      !Number.isFinite(repNum) ||
+      repNum < 0 ||
+      repNum > 100
+    ) {
+      return res.status(400).json({
+        message: 'Repeat examination marks must be a valid number between 0 and 100.',
+      });
+    }
+
+    // 3. Compute repeat grade and final result
+    const repeatGrade = calculateGrade(repNum);
+    const finalResult = calculateFinalExamResult(origMarks, repNum, studentEntry.status);
+
+    studentEntry.repeatMarks = repNum;
+    studentEntry.repeatScore = repNum;
+    studentEntry.repeatGrade = repeatGrade;
+    studentEntry.repeatDate = repeatDate ? new Date(repeatDate) : new Date();
+    studentEntry.isResit = true;
+    studentEntry.finalResult = finalResult;
+
+    if (repNum >= 60) {
+      studentEntry.status = 'PASS';
+    }
+
+    await result.save();
+
+    await logAdminAction(req.adminAuth?.id, 'SAVE_REPEAT_MARKS', {
+      resultId: result._id,
+      studentId: studentEntry.studentId,
+      originalMarks: origMarks,
+      repeatMarks: repNum,
+      repeatGrade,
+      finalResult,
+    });
+
+    return res.json({
+      success: true,
+      message: 'Repeat examination marks saved successfully.',
+      student: {
+        student: String(studentEntry.student),
+        studentId: studentEntry.studentId,
+        studentName: studentEntry.studentName,
+        marks: studentEntry.marks,
+        grade: studentEntry.grade,
+        repeatMarks: studentEntry.repeatMarks,
+        repeatScore: studentEntry.repeatScore,
+        repeatGrade: studentEntry.repeatGrade,
+        repeatDate: studentEntry.repeatDate,
+        isResit: studentEntry.isResit,
+        finalResult: studentEntry.finalResult,
+        status: studentEntry.status,
+      },
+      resultId: String(result._id),
     });
   } catch (err) {
     next(err);

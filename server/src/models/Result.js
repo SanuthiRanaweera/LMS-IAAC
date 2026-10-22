@@ -48,9 +48,43 @@ const StudentResultSchema = new Schema(
       default: 'PENDING',
     },
 
+    // Repeat examination fields (separate from original marks)
+    repeatMarks: {
+      type: Number,
+      default: null,
+      min: 0,
+      max: 100,
+    },
+
+    repeatScore: {
+      type: Number,
+      default: null,
+      min: 0,
+      max: 100,
+    },
+
+    repeatGrade: {
+      type: String,
+      trim: true,
+      maxlength: 20,
+      default: null,
+    },
+
+    repeatDate: {
+      type: Date,
+      default: null,
+    },
+
     isResit: {
       type: Boolean,
       default: false,
+    },
+
+    finalResult: {
+      type: String,
+      trim: true,
+      maxlength: 40,
+      default: null,
     },
 
     remarks: {

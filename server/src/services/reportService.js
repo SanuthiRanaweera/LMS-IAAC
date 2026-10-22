@@ -12,6 +12,7 @@ import {
   calculateGrade,
   isPassingScore,
   calculateResultStatus,
+  calculateFinalExamResult,
 } from '../utils/gradeCalculator.js';
 import { calculateFinalStatus } from '../utils/finalStatusCalculator.js';
 
@@ -190,9 +191,23 @@ export async function generateReportData({
 
     const gradeVal = calculateGrade(marksVal);
     const rawStatus = studentResultInSheet?.status || '';
-    const resultStatusVal = calculateResultStatus(marksVal, rawStatus);
-    const isResitVal = Boolean(studentResultInSheet?.isResit);
+
+    // Repeat marks fields
+    const repMarksVal =
+      studentResultInSheet &&
+      (studentResultInSheet.repeatMarks !== null && studentResultInSheet.repeatMarks !== undefined
+        ? Number(studentResultInSheet.repeatMarks)
+        : studentResultInSheet.repeatScore !== null && studentResultInSheet.repeatScore !== undefined
+        ? Number(studentResultInSheet.repeatScore)
+        : null);
+
+    const repGradeVal =
+      studentResultInSheet?.repeatGrade || (repMarksVal !== null ? calculateGrade(repMarksVal) : null);
+
+    const isResitVal = Boolean(studentResultInSheet?.isResit || repMarksVal !== null);
     const examTypeVal = isResitVal ? 'Resit' : 'Regular';
+    const finalExamResult = calculateFinalExamResult(marksVal, repMarksVal, rawStatus);
+    const resultStatusVal = finalExamResult;
 
     // Also collect all module results for this student across all saved sheets (for complete diploma or transcript)
     const modulesTaken = [];
@@ -230,6 +245,11 @@ export async function generateReportData({
       moduleName: targetExamTitle,
       marks: marksVal,
       grade: gradeVal || '—',
+      originalMarks: marksVal,
+      originalGrade: gradeVal || '—',
+      repeatMarks: repMarksVal,
+      repeatGrade: repGradeVal || '—',
+      finalResult: finalExamResult,
       resultStatus: resultStatusVal,
       isResit: isResitVal,
       examType: examTypeVal,
@@ -243,22 +263,36 @@ export async function generateReportData({
 
   // Filter by Report Type
   if (reportType === 'PASSED_STUDENTS') {
-    filteredRows = filteredRows.filter((r) => isPassingScore(r.marks));
+    filteredRows = filteredRows.filter(
+      (r) => isPassingScore(r.marks) || (r.repeatMarks !== null && isPassingScore(r.repeatMarks))
+    );
   } else if (reportType === 'FAILED_STUDENTS') {
-    filteredRows = filteredRows.filter((r) => r.marks !== null && !isPassingScore(r.marks));
+    filteredRows = filteredRows.filter(
+      (r) =>
+        r.marks !== null &&
+        !isPassingScore(r.marks) &&
+        (r.repeatMarks === null || !isPassingScore(r.repeatMarks))
+    );
   } else if (reportType === 'RESIT_EXAMINATION') {
-    filteredRows = filteredRows.filter((r) => r.isResit === true);
+    filteredRows = filteredRows.filter((r) => r.isResit === true || r.repeatMarks !== null);
   } else if (reportType === 'PENDING_RESULTS') {
     filteredRows = filteredRows.filter((r) => r.marks === null);
   }
 
   // Filter by Result Status
   if (resultStatus === 'PASSED') {
-    filteredRows = filteredRows.filter((r) => isPassingScore(r.marks));
+    filteredRows = filteredRows.filter(
+      (r) => isPassingScore(r.marks) || (r.repeatMarks !== null && isPassingScore(r.repeatMarks))
+    );
   } else if (resultStatus === 'FAILED') {
-    filteredRows = filteredRows.filter((r) => r.marks !== null && !isPassingScore(r.marks));
+    filteredRows = filteredRows.filter(
+      (r) =>
+        r.marks !== null &&
+        !isPassingScore(r.marks) &&
+        (r.repeatMarks === null || !isPassingScore(r.repeatMarks))
+    );
   } else if (resultStatus === 'RESIT') {
-    filteredRows = filteredRows.filter((r) => r.isResit === true);
+    filteredRows = filteredRows.filter((r) => r.isResit === true || r.repeatMarks !== null);
   } else if (resultStatus === 'PENDING') {
     filteredRows = filteredRows.filter((r) => r.marks === null);
   }
@@ -277,7 +311,9 @@ export async function generateReportData({
   for (const r of allRows) {
     if (r.marks !== null) {
       totalWithMarks += 1;
-      if (isPassingScore(r.marks)) {
+      const isPassedFinal =
+        isPassingScore(r.marks) || (r.repeatMarks !== null && isPassingScore(r.repeatMarks));
+      if (isPassedFinal) {
         passedCount += 1;
       } else {
         failedCount += 1;
@@ -286,7 +322,7 @@ export async function generateReportData({
       pendingCount += 1;
     }
 
-    if (r.isResit) {
+    if (r.isResit || r.repeatMarks !== null) {
       resitCount += 1;
     }
   }

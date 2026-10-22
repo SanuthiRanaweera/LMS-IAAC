@@ -9,6 +9,13 @@ import {
 import { FileDown, ClipboardList } from 'lucide-react';
 import ResultsReportModal from '../../components/results/ResultsReportModal.jsx';
 import ResultsReportGenerator from '../../components/results/ResultsReportGenerator.jsx';
+import RepeatMarksModal from '../../components/results/RepeatMarksModal.jsx';
+import {
+  calculateGrade,
+  calculateResultStatus,
+  isRepeatEligible,
+  calculateFinalExamResult,
+} from '../../utils/gradeCalculator.js';
 
 const COURSES = [
   'Cabin Crew',
@@ -18,6 +25,13 @@ const COURSES = [
 ];
 
 export default function ResultsPage() {
+  /* =========================================================
+     REPEAT EXAMINATION MODAL STATE
+  ========================================================= */
+
+  const [repeatModalOpen, setRepeatModalOpen] = useState(false);
+  const [repeatModalStudent, setRepeatModalStudent] = useState(null);
+
   /* =========================================================
      ACADEMIC HIERARCHY
   ========================================================= */
@@ -410,6 +424,11 @@ export default function ResultsPage() {
             marks: '',
             status: 'PENDING',
             remarks: '',
+            isResit: false,
+            repeatMarks: null,
+            repeatGrade: '',
+            repeatDate: null,
+            finalResult: 'Pending',
           }))
         );
       } catch (err) {
@@ -476,19 +495,87 @@ export default function ResultsPage() {
     }
 
     setRows((previous) =>
-      previous.map((row, rowIndex) =>
-        rowIndex === index
-          ? {
-              ...row,
+      previous.map((row, rowIndex) => {
+        if (rowIndex !== index) return row;
 
-              marks: value,
+        const newStatus = calculateStatus(value);
+        const newFinalResult = calculateFinalExamResult(
+          value,
+          row.repeatMarks,
+          newStatus
+        );
 
-              status:
-                calculateStatus(value),
-            }
-          : row
-      )
+        return {
+          ...row,
+          marks: value,
+          status: newStatus,
+          finalResult: newFinalResult,
+        };
+      })
     );
+  }
+
+  /* =========================================================
+     REPEAT EXAMINATION MODAL HANDLERS
+  ========================================================= */
+
+  function openRepeatMarksModal(row) {
+    setRepeatModalStudent(row);
+    setRepeatModalOpen(true);
+  }
+
+  function handleRepeatMarksSuccess(updatedStudentData) {
+    setRows((previous) =>
+      previous.map((row) => {
+        const matchId = String(row.student || row.studentId);
+        const targetId = String(
+          updatedStudentData.student || updatedStudentData.studentId
+        );
+
+        if (
+          matchId === targetId ||
+          row.studentId === updatedStudentData.studentId
+        ) {
+          const repMarks =
+            updatedStudentData.repeatMarks !== null &&
+            updatedStudentData.repeatMarks !== undefined &&
+            updatedStudentData.repeatMarks !== ''
+              ? Number(updatedStudentData.repeatMarks)
+              : null;
+
+          const repGrade =
+            updatedStudentData.repeatGrade ||
+            (repMarks !== null ? calculateGrade(repMarks) : '');
+
+          const finalRes =
+            updatedStudentData.finalResult ||
+            calculateFinalExamResult(row.marks, repMarks, row.status);
+
+          return {
+            ...row,
+            repeatMarks: repMarks,
+            repeatScore: repMarks,
+            repeatGrade: repGrade,
+            repeatDate:
+              updatedStudentData.repeatDate || new Date().toISOString(),
+            isResit: true,
+            finalResult: finalRes,
+            status: repMarks !== null && repMarks >= 60 ? 'PASS' : row.status,
+          };
+        }
+        return row;
+      })
+    );
+
+    setSuccess(
+      `Repeat examination marks updated successfully for ${
+        updatedStudentData.studentName || updatedStudentData.studentId
+      }.`
+    );
+
+    if (editingResultId) {
+      loadSavedResults();
+    }
   }
 
   /* =========================================================
@@ -563,22 +650,43 @@ export default function ResultsPage() {
   ========================================================= */
 
   function buildResultRowsPayload() {
-    return rows.map((row) => ({
-      student: row.student,
-
-      marks:
+    return rows.map((row) => {
+      const origMarks =
         row.status === 'ABSENT'
           ? null
           : row.marks === ''
             ? null
-            : Number(row.marks),
+            : Number(row.marks);
 
-      status:
-        row.status,
+      const repMarks =
+        row.repeatMarks !== null &&
+        row.repeatMarks !== undefined &&
+        row.repeatMarks !== ''
+          ? Number(row.repeatMarks)
+          : null;
 
-      remarks:
-        String(row.remarks || '').trim(),
-    }));
+      const repGrade =
+        row.repeatGrade ||
+        (repMarks !== null ? calculateGrade(repMarks) : '');
+
+      const finalRes =
+        row.finalResult ||
+        calculateFinalExamResult(origMarks, repMarks, row.status);
+
+      return {
+        student: row.student,
+        marks: origMarks,
+        grade: origMarks !== null ? calculateGrade(origMarks) : '',
+        status: row.status,
+        remarks: String(row.remarks || '').trim(),
+        isResit: Boolean(row.isResit || repMarks !== null),
+        repeatMarks: repMarks,
+        repeatScore: repMarks,
+        repeatGrade: repGrade,
+        repeatDate: row.repeatDate || null,
+        finalResult: finalRes,
+      };
+    });
   }
 
   /* =========================================================
@@ -737,32 +845,52 @@ export default function ResultsPage() {
 
       const loadedRows =
         resultRows.map(
-          (row) => ({
-            student:
-              row.student,
-
-            studentId:
-              row.studentId || '',
-
-            studentName:
-              row.studentName || '',
-
-            marks:
-              row.marks === null ||
-              row.marks === undefined
+          (row) => {
+            const marksStr =
+              row.marks === null || row.marks === undefined
                 ? ''
-                : String(row.marks),
+                : String(row.marks);
 
-            status:
+            const repMarksNum =
+              row.repeatMarks !== null &&
+              row.repeatMarks !== undefined &&
+              row.repeatMarks !== ''
+                ? Number(row.repeatMarks)
+                : null;
+
+            const repGradeStr =
+              row.repeatGrade ||
+              (repMarksNum !== null ? calculateGrade(repMarksNum) : '');
+
+            const rowStatus =
               row.status === 'ABSENT'
                 ? 'ABSENT'
-                : row.marks !== null && row.marks !== undefined && row.marks !== ''
-                  ? calculateStatus(row.marks)
-                  : row.status || 'PENDING',
+                : marksStr !== ''
+                  ? calculateStatus(marksStr)
+                  : row.status || 'PENDING';
 
-            remarks:
-              row.remarks || '',
-          })
+            const finalResStr =
+              row.finalResult ||
+              calculateFinalExamResult(
+                marksStr !== '' ? Number(marksStr) : null,
+                repMarksNum,
+                rowStatus
+              );
+
+            return {
+              student: row.student,
+              studentId: row.studentId || '',
+              studentName: row.studentName || '',
+              marks: marksStr,
+              status: rowStatus,
+              remarks: row.remarks || '',
+              isResit: Boolean(row.isResit || repMarksNum !== null),
+              repeatMarks: repMarksNum,
+              repeatGrade: repGradeStr,
+              repeatDate: row.repeatDate || null,
+              finalResult: finalResStr,
+            };
+          }
         );
 
       setRows(loadedRows);
@@ -1389,27 +1517,43 @@ export default function ResultsPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1000px]">
-            <thead className="bg-slate-50">
+          <table className="w-full min-w-[1100px]">
+            <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-600">
                   Student ID
                 </th>
 
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-600">
                   Student Name
                 </th>
 
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">
-                  Marks
+                <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-600">
+                  Original Marks
                 </th>
 
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">
-                  Status
+                <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wider text-slate-600">
+                  Original Grade
                 </th>
 
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wider text-slate-600">
+                  Repeat Marks
+                </th>
+
+                <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wider text-slate-600">
+                  Repeat Grade
+                </th>
+
+                <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wider text-slate-600">
+                  Final Result
+                </th>
+
+                <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-600">
                   Remarks
+                </th>
+
+                <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wider text-slate-600">
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -1419,139 +1563,204 @@ export default function ResultsPage() {
                 (
                   row,
                   index
-                ) => (
-                  <tr
-                    key={
-                      row.student
-                    }
-                    className="hover:bg-slate-50/60"
-                  >
-                    <td className="whitespace-nowrap px-4 py-3 text-sm font-semibold text-slate-800">
-                      {row.studentId}
-                    </td>
+                ) => {
+                  const hasRepeat = Boolean(
+                    (row.repeatMarks !== null &&
+                      row.repeatMarks !== undefined &&
+                      row.repeatMarks !== '') ||
+                    (row.isResit && row.repeatMarks !== null)
+                  );
 
-                    <td className="px-4 py-3 text-sm text-slate-700">
-                      {row.studentName}
-                    </td>
+                  const origGrade = calculateGrade(row.marks);
+                  const eligibleForRepeat = isRepeatEligible(row.marks, row.status);
+                  const currentFinalResult = calculateFinalExamResult(
+                    row.marks,
+                    row.repeatMarks,
+                    row.status
+                  );
 
-                    {/* MARKS */}
+                  const trClass = hasRepeat
+                    ? 'bg-amber-50/70 border-l-4 border-amber-500 hover:bg-amber-50 transition'
+                    : 'hover:bg-slate-50/60 border-l-4 border-transparent transition';
 
-                    <td className="px-4 py-3">
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        disabled={
-                          row.status ===
-                          'ABSENT'
-                        }
-                        value={
-                          row.marks
-                        }
-                        onChange={(
-                          event
-                        ) =>
-                          handleMarksChange(
-                            index,
-                            event.target.value
-                          )
-                        }
-                        className="w-24 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
-                      />
-                    </td>
+                  return (
+                    <tr
+                      key={row.student || row.studentId || index}
+                      className={trClass}
+                    >
+                      {/* Student ID */}
+                      <td className="whitespace-nowrap px-4 py-3 text-sm font-semibold font-mono text-slate-800">
+                        {row.studentId}
+                      </td>
 
-                    {/* STATUS */}
+                      {/* Student Name */}
+                      <td className="px-4 py-3 text-sm text-slate-800 font-medium">
+                        <div className="flex items-center gap-2">
+                          <span>{row.studentName}</span>
+                          {hasRepeat && (
+                            <span className="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-300">
+                              REPEAT EXAM
+                            </span>
+                          )}
+                        </div>
+                      </td>
 
-                    <td className="px-4 py-3">
-                      <select
-                        value={
-                          row.status
-                        }
-                        onChange={(
-                          event
-                        ) => {
-                          const value =
-                            event.target.value;
-
-                          setRows(
-                            (
-                              previous
-                            ) =>
-                              previous.map(
-                                (
-                                  item,
-                                  rowIndex
-                                ) =>
-                                  rowIndex ===
-                                  index
-                                    ? {
-                                        ...item,
-
-                                        status:
-                                          value,
-
-                                        ...(value ===
-                                        'ABSENT'
-                                          ? {
-                                              marks:
-                                                '',
-                                            }
-                                          : {}),
-                                      }
-                                    : item
+                      {/* Original Marks */}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            disabled={row.status === 'ABSENT'}
+                            value={row.marks}
+                            onChange={(event) =>
+                              handleMarksChange(
+                                index,
+                                event.target.value
                               )
-                          );
-                        }}
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                      >
-                        <option value="PENDING">
-                          Pending
-                        </option>
+                            }
+                            placeholder="0-100"
+                            className="w-20 rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm font-semibold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
+                          />
+                          <select
+                            value={row.status === 'ABSENT' ? 'ABSENT' : 'NORMAL'}
+                            onChange={(e) => {
+                              const isAbsent = e.target.value === 'ABSENT';
+                              setRows((prev) =>
+                                prev.map((r, rIdx) =>
+                                  rIdx === index
+                                    ? {
+                                        ...r,
+                                        status: isAbsent ? 'ABSENT' : calculateStatus(r.marks),
+                                        marks: isAbsent ? '' : r.marks,
+                                        finalResult: calculateFinalExamResult(
+                                          isAbsent ? '' : r.marks,
+                                          r.repeatMarks,
+                                          isAbsent ? 'ABSENT' : calculateStatus(r.marks)
+                                        ),
+                                      }
+                                    : r
+                                )
+                              );
+                            }}
+                            className="rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-600 outline-none"
+                            title="Attendance status"
+                          >
+                            <option value="NORMAL">Present</option>
+                            <option value="ABSENT">Absent</option>
+                          </select>
+                        </div>
+                      </td>
 
-                        <option value="PASS">
-                          Pass
-                        </option>
+                      {/* Original Grade */}
+                      <td className="px-4 py-3 text-center">
+                        {origGrade ? (
+                          <span
+                            className={`inline-flex items-center justify-center rounded px-2.5 py-0.5 text-xs font-bold ${
+                              origGrade === 'F'
+                                ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                : 'bg-blue-100 text-blue-800 border border-blue-200'
+                            }`}
+                          >
+                            {origGrade}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-semibold">—</span>
+                        )}
+                      </td>
 
-                        <option value="FAIL">
-                          Fail
-                        </option>
+                      {/* Repeat Marks */}
+                      <td className="px-4 py-3 text-center">
+                        {hasRepeat ? (
+                          <span className="text-amber-600 font-bold text-sm">
+                            {row.repeatMarks}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-medium">—</span>
+                        )}
+                      </td>
 
-                        <option value="ABSENT">
-                          Absent
-                        </option>
-                      </select>
-                    </td>
+                      {/* Repeat Grade */}
+                      <td className="px-4 py-3 text-center">
+                        {hasRepeat ? (
+                          <span className="inline-flex items-center justify-center rounded px-2.5 py-0.5 text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                            {row.repeatGrade || calculateGrade(row.repeatMarks)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-medium">—</span>
+                        )}
+                      </td>
 
-                    {/* REMARKS */}
+                      {/* Final Result */}
+                      <td className="px-4 py-3 text-center">
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${
+                            currentFinalResult.startsWith('Passed')
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              : currentFinalResult.startsWith('Failed')
+                              ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                              : currentFinalResult === 'Absent'
+                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                              : 'bg-slate-100 text-slate-600 border border-slate-200'
+                          }`}
+                        >
+                          {currentFinalResult}
+                        </span>
+                      </td>
 
-                    <td className="px-4 py-3">
-                      <input
-                        type="text"
-                        value={
-                          row.remarks
-                        }
-                        onChange={(
-                          event
-                        ) =>
-                          updateRow(
-                            index,
-                            'remarks',
-                            event.target.value
-                          )
-                        }
-                        placeholder="Optional"
-                        className="min-w-48 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                      />
-                    </td>
-                  </tr>
-                )
+                      {/* Remarks */}
+                      <td className="px-4 py-3">
+                        <input
+                          type="text"
+                          value={row.remarks || ''}
+                          onChange={(event) =>
+                            updateRow(
+                              index,
+                              'remarks',
+                              event.target.value
+                            )
+                          }
+                          placeholder="Optional"
+                          className="w-32 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        />
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-4 py-3 text-center">
+                        {eligibleForRepeat ? (
+                          <button
+                            type="button"
+                            onClick={() => openRepeatMarksModal(row)}
+                            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition shadow-xs cursor-pointer ${
+                              hasRepeat
+                                ? 'border border-amber-400 bg-amber-100 text-amber-900 hover:bg-amber-200'
+                                : 'border border-amber-500 bg-amber-500 text-white hover:bg-amber-600'
+                            }`}
+                          >
+                            <span>↻</span>
+                            <span>{hasRepeat ? 'Edit Repeat' : 'Add Repeat Marks'}</span>
+                          </button>
+                        ) : (
+                          <span className="text-[11px] font-medium text-slate-400">
+                            {row.marks !== '' && Number(row.marks) >= 60 ? (
+                              <span className="text-emerald-600 font-semibold">Passed</span>
+                            ) : (
+                              '—'
+                            )}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                }
               )}
 
               {!studentsLoading &&
               rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={9}
                     className="px-4 py-12 text-center text-sm font-medium text-slate-500"
                   >
                     Select Branch, Intake, Batch and Diploma to display students.
@@ -1562,7 +1771,7 @@ export default function ResultsPage() {
               {studentsLoading ? (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={9}
                     className="px-4 py-12 text-center text-sm font-medium text-slate-500"
                   >
                     Loading students...
@@ -1940,6 +2149,21 @@ export default function ResultsPage() {
         isOpen={isReportModalOpen}
         onClose={() => setIsReportModalOpen(false)}
         initialFilters={reportInitialFilters}
+      />
+
+      {/* =====================================================
+          REPEAT EXAMINATION MARKS MODAL
+      ===================================================== */}
+      <RepeatMarksModal
+        isOpen={repeatModalOpen}
+        onClose={() => {
+          setRepeatModalOpen(false);
+          setRepeatModalStudent(null);
+        }}
+        studentRow={repeatModalStudent}
+        resultTitle={resultTitle}
+        resultId={editingResultId}
+        onSaveSuccess={handleRepeatMarksSuccess}
       />
     </div>
   );

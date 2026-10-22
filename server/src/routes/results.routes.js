@@ -14,6 +14,7 @@ import {
   unpublishResult,
   deleteResult,
   getStudentPublishedResults,
+  saveRepeatMarks,
 } from '../controllers/results.controller.js';
 
 import {
@@ -191,6 +192,25 @@ resultsRouter.put(
   '/:id',
   requirePermission('UPDATE_RESULTS'),
   updateResult
+);
+
+/* =========================================================
+   REPEAT EXAMINATION MARKS
+========================================================= */
+
+/*
+POST /api/results/:id/repeat-marks
+PUT /api/results/:id/repeat-marks
+*/
+resultsRouter.post(
+  '/:id/repeat-marks',
+  requirePermission('UPDATE_RESULTS'),
+  saveRepeatMarks
+);
+resultsRouter.put(
+  '/:id/repeat-marks',
+  requirePermission('UPDATE_RESULTS'),
+  saveRepeatMarks
 );
 
 /* =========================================================

@@ -821,21 +821,58 @@ export default function ResultsReportGenerator({ initialFilters = {} }) {
                     <th className="py-2.5 px-3 text-center font-bold">No.</th>
                     <th className="py-2.5 px-3 font-bold">Student ID</th>
                     <th className="py-2.5 px-3 font-bold">Student Name</th>
-                    <th className="py-2.5 px-3 text-center font-bold">Marks</th>
-                    <th className="py-2.5 px-3 text-center font-bold">Grade</th>
-                    <th className="py-2.5 px-3 text-center font-bold">Result Status</th>
-                    <th className="py-2.5 px-3 text-center font-bold">Exam Type</th>
+                    <th className="py-2.5 px-3 text-center font-bold">Original Marks</th>
+                    <th className="py-2.5 px-3 text-center font-bold">Original Grade</th>
+                    <th className="py-2.5 px-3 text-center font-bold">Repeat Marks</th>
+                    <th className="py-2.5 px-3 text-center font-bold">Repeat Grade</th>
+                    <th className="py-2.5 px-3 text-center font-bold">Final Result</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {previewStudents.map((s, idx) => {
-                    const numMarks = s.marks !== null && s.marks !== undefined ? Number(s.marks) : null;
-                    const isPass = numMarks !== null && numMarks >= 60;
-                    const isFail = numMarks !== null && numMarks < 60;
-                    const isResit = Boolean(s.isResit);
+                    const origMarks =
+                      s.originalMarks !== undefined && s.originalMarks !== null
+                        ? s.originalMarks
+                        : s.marks;
+                    const numOrig =
+                      origMarks !== null && origMarks !== undefined && origMarks !== ''
+                        ? Number(origMarks)
+                        : null;
+                    const origGrade =
+                      s.originalGrade && s.originalGrade !== '-' && s.originalGrade !== '—'
+                        ? s.originalGrade
+                        : s.grade;
+                    const hasRepeat =
+                      s.repeatMarks !== null &&
+                      s.repeatMarks !== undefined &&
+                      s.repeatMarks !== '' &&
+                      s.repeatMarks !== '-' &&
+                      s.repeatMarks !== '—';
+                    const repMarks = hasRepeat ? s.repeatMarks : '—';
+                    const repGrade =
+                      hasRepeat && s.repeatGrade && s.repeatGrade !== '-' && s.repeatGrade !== '—'
+                        ? s.repeatGrade
+                        : '—';
+                    const finalRes =
+                      s.finalResult ||
+                      (numOrig !== null
+                        ? numOrig >= 60
+                          ? 'Passed'
+                          : 'Failed'
+                        : s.resultStatus || 'Pending');
+
+                    const isPass = numOrig !== null && numOrig >= 60;
+                    const isFail = numOrig !== null && numOrig < 60;
 
                     return (
-                      <tr key={s.id || s.studentId || idx} className="hover:bg-slate-50 transition">
+                      <tr
+                        key={s.id || s.studentId || idx}
+                        className={`transition ${
+                          hasRepeat
+                            ? 'bg-amber-50/80 hover:bg-amber-100/60 border-l-4 border-amber-500'
+                            : 'hover:bg-slate-50 border-l-4 border-transparent'
+                        }`}
+                      >
                         <td className="py-2 px-3 text-center text-slate-500 font-mono">
                           {s.no || idx + 1}
                         </td>
@@ -843,35 +880,48 @@ export default function ResultsReportGenerator({ initialFilters = {} }) {
                           {s.studentId}
                         </td>
                         <td className="py-2 px-3 text-slate-800 font-medium">
-                          {s.studentName}
+                          <span>{s.studentName}</span>
+                          {hasRepeat && (
+                            <span className="inline-flex items-center ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800 border border-amber-300">
+                              REPEAT EXAM
+                            </span>
+                          )}
                         </td>
                         <td className="py-2 px-3 text-center font-bold">
-                          {numMarks !== null ? (
-                            <span
-                              className={
-                                isResit
-                                  ? 'text-amber-600 font-bold'
-                                  : isPass
-                                  ? 'text-emerald-600'
-                                  : 'text-rose-600'
-                              }
-                            >
-                              {numMarks}
+                          {numOrig !== null ? (
+                            <span className={isPass ? 'text-emerald-600' : 'text-rose-600'}>
+                              {numOrig}
                             </span>
                           ) : (
                             <span className="text-slate-400 font-normal">—</span>
                           )}
                         </td>
                         <td className="py-2 px-3 text-center">
-                          {s.grade && s.grade !== '—' ? (
+                          {origGrade && origGrade !== '—' && origGrade !== '-' ? (
                             <span
                               className={`inline-flex rounded px-1.5 py-0.5 text-[11px] font-bold ${
                                 isFail
                                   ? 'bg-rose-100 text-rose-800'
-                                  : 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-blue-100 text-blue-800'
                               }`}
                             >
-                              {s.grade}
+                              {origGrade}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="py-2 px-3 text-center">
+                          {hasRepeat ? (
+                            <span className="text-amber-600 font-bold">{repMarks}</span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="py-2 px-3 text-center">
+                          {hasRepeat && repGrade !== '—' ? (
+                            <span className="inline-flex rounded px-1.5 py-0.5 text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                              {repGrade}
                             </span>
                           ) : (
                             <span className="text-slate-400">—</span>
@@ -880,25 +930,17 @@ export default function ResultsReportGenerator({ initialFilters = {} }) {
                         <td className="py-2 px-3 text-center">
                           <span
                             className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
-                              s.resultStatus === 'Passed'
+                              finalRes.startsWith('Passed')
                                 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                : s.resultStatus === 'Failed'
+                                : finalRes.startsWith('Failed')
                                 ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                : finalRes === 'Absent'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
                                 : 'bg-slate-100 text-slate-700 border border-slate-200'
                             }`}
                           >
-                            {s.resultStatus || 'Pending'}
+                            {finalRes}
                           </span>
-                        </td>
-                        <td className="py-2 px-3 text-center">
-                          {isResit ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200">
-                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
-                              RESIT
-                            </span>
-                          ) : (
-                            <span className="text-slate-500 text-[11px]">Regular</span>
-                          )}
                         </td>
                       </tr>
                     );
@@ -987,3 +1029,4 @@ export default function ResultsReportGenerator({ initialFilters = {} }) {
     </div>
   );
 }
+

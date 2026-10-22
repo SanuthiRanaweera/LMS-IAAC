@@ -177,19 +177,41 @@ export async function exportResultsReportToPdf({
 
   // 4. Examination Results Table
   const tableData = (students || []).map((s, idx) => {
-    const marksStr = s.marks !== null && s.marks !== undefined ? String(s.score ?? s.marks) : '—';
-    const gradeStr = s.grade && s.grade !== '—' ? String(s.grade) : '—';
-    const statusStr = s.resultStatus || 'Pending';
-    const examTypeStr = s.isResit ? 'Resit' : 'Regular';
+    const origMarksStr =
+      s.originalMarks !== null && s.originalMarks !== undefined
+        ? String(s.originalMarks)
+        : s.marks !== null && s.marks !== undefined
+        ? String(s.score ?? s.marks)
+        : '—';
+
+    const origGradeStr =
+      s.originalGrade && s.originalGrade !== '—'
+        ? String(s.originalGrade)
+        : s.grade && s.grade !== '—'
+        ? String(s.grade)
+        : '—';
+
+    const repMarksStr =
+      s.repeatMarks !== null && s.repeatMarks !== undefined && s.repeatMarks !== ''
+        ? String(s.repeatMarks)
+        : s.repeatScore !== null && s.repeatScore !== undefined && s.repeatScore !== ''
+        ? String(s.repeatScore)
+        : '—';
+
+    const repGradeStr = s.repeatGrade && s.repeatGrade !== '—' ? String(s.repeatGrade) : '—';
+    const finalResultStr = s.finalResult || s.resultStatus || 'Pending';
+    const isRepeatRow = Boolean(s.isResit || (s.repeatMarks !== null && s.repeatMarks !== undefined));
 
     return {
       no: String(s.no || idx + 1),
       studentId: String(s.studentId || '—'),
       studentName: String(s.studentName || '—'),
-      marks: marksStr,
-      grade: gradeStr,
-      resultStatus: statusStr,
-      examType: examTypeStr,
+      originalMarks: origMarksStr,
+      originalGrade: origGradeStr,
+      repeatMarks: repMarksStr,
+      repeatGrade: repGradeStr,
+      finalResult: finalResultStr,
+      isRepeat: isRepeatRow,
       raw: s,
     };
   });
@@ -197,22 +219,34 @@ export async function exportResultsReportToPdf({
   autoTable(doc, {
     startY,
     margin: { left: margin, right: margin, bottom: 22 },
-    head: [['No.', 'Student ID', 'Student Name', 'Marks', 'Grade', 'Result Status', 'Exam Type']],
+    head: [
+      [
+        'No.',
+        'Student ID',
+        'Student Name',
+        'Original Marks',
+        'Original Grade',
+        'Repeat Marks',
+        'Repeat Grade',
+        'Final Result',
+      ],
+    ],
     body: tableData.map((r) => [
       r.no,
       r.studentId,
       r.studentName,
-      r.marks,
-      r.grade,
-      r.resultStatus,
-      r.examType,
+      r.originalMarks,
+      r.originalGrade,
+      r.repeatMarks,
+      r.repeatGrade,
+      r.finalResult,
     ]),
     theme: 'grid',
     styles: {
       font: 'helvetica',
-      fontSize: 8.5,
+      fontSize: 8,
       textColor: [51, 65, 85],
-      cellPadding: 2.2,
+      cellPadding: 2,
       lineColor: [226, 232, 240],
       lineWidth: 0.1,
     },
@@ -221,68 +255,77 @@ export async function exportResultsReportToPdf({
       textColor: [255, 255, 255],
       fontStyle: 'bold',
       halign: 'left',
+      fontSize: 8,
     },
     alternateRowStyles: {
       fillColor: [248, 250, 252],
     },
     columnStyles: {
-      0: { cellWidth: 10, halign: 'center' },
-      1: { cellWidth: isLandscape ? 36 : 28, fontStyle: 'bold' },
-      2: { cellWidth: isLandscape ? 85 : 55 },
+      0: { cellWidth: 9, halign: 'center' },
+      1: { cellWidth: isLandscape ? 32 : 25, fontStyle: 'bold' },
+      2: { cellWidth: isLandscape ? 65 : 46 },
       3: { cellWidth: 20, halign: 'center', fontStyle: 'bold' },
       4: { cellWidth: 18, halign: 'center', fontStyle: 'bold' },
-      5: { cellWidth: 28, halign: 'center', fontStyle: 'bold' },
-      6: { cellWidth: 24, halign: 'center' },
+      5: { cellWidth: 20, halign: 'center', fontStyle: 'bold' },
+      6: { cellWidth: 18, halign: 'center', fontStyle: 'bold' },
+      7: { cellWidth: isLandscape ? 34 : 26, halign: 'center', fontStyle: 'bold' },
     },
     didParseCell(data) {
       if (data.section !== 'body') return;
       const row = tableData[data.row.index];
       if (!row) return;
 
-      const isResit = row.examType === 'Resit';
-      const numScore = Number(row.marks);
-      const isPass = Number.isFinite(numScore) && numScore >= 60;
-      const isFail = Number.isFinite(numScore) && numScore < 60;
+      // Highlight entire row in light amber if student has repeat examination marks
+      if (row.isRepeat) {
+        data.cell.styles.fillColor = [254, 243, 199]; // light amber (#fef3c7)
+      }
 
-      // Marks column
+      const numOrig = Number(row.originalMarks);
+      const isOrigPass = Number.isFinite(numOrig) && numOrig >= 60;
+      const isOrigFail = Number.isFinite(numOrig) && numOrig < 60;
+
+      // Original Marks column (index 3)
       if (data.column.index === 3) {
-        if (isResit) {
-          data.cell.styles.textColor = [217, 119, 6]; // amber-600
-        } else if (isPass) {
+        if (isOrigPass) {
           data.cell.styles.textColor = [5, 150, 105]; // emerald-600
-        } else if (isFail) {
+        } else if (isOrigFail) {
+          data.cell.styles.textColor = [220, 38, 38]; // red-600
+        }
+      }
+
+      // Original Grade column (index 4)
+      if (data.column.index === 4) {
+        if (row.originalGrade === 'F') {
+          data.cell.styles.textColor = [220, 38, 38];
+        } else if (['A', 'B', 'C'].includes(row.originalGrade)) {
+          data.cell.styles.textColor = [5, 150, 105];
+        }
+      }
+
+      // Repeat Marks column (index 5)
+      if (data.column.index === 5 && row.repeatMarks !== '—') {
+        data.cell.styles.textColor = [217, 119, 6]; // amber-600 font-semibold
+        data.cell.styles.fontStyle = 'bold';
+      }
+
+      // Repeat Grade column (index 6)
+      if (data.column.index === 6 && row.repeatGrade !== '—') {
+        if (['A', 'B', 'C'].includes(row.repeatGrade)) {
+          data.cell.styles.textColor = [5, 150, 105];
+        } else if (row.repeatGrade === 'F') {
+          data.cell.styles.textColor = [220, 38, 38];
+        }
+      }
+
+      // Final Result column (index 7)
+      if (data.column.index === 7) {
+        if (row.finalResult.startsWith('Passed')) {
+          data.cell.styles.textColor = [5, 150, 105]; // emerald-600
+        } else if (row.finalResult.startsWith('Failed')) {
           data.cell.styles.textColor = [220, 38, 38]; // red-600
         } else {
-          data.cell.styles.textColor = [148, 163, 184]; // slate-400
+          data.cell.styles.textColor = [100, 116, 139]; // slate-500
         }
-      }
-
-      // Grade column
-      if (data.column.index === 4) {
-        if (isResit) {
-          data.cell.styles.textColor = [217, 119, 6];
-        } else if (['A', 'B', 'C', 'D', 'M', 'P'].includes(row.grade)) {
-          data.cell.styles.textColor = [5, 150, 105];
-        } else if (row.grade === 'F') {
-          data.cell.styles.textColor = [220, 38, 38];
-        }
-      }
-
-      // Status column
-      if (data.column.index === 5) {
-        if (row.resultStatus === 'Passed') {
-          data.cell.styles.textColor = [5, 150, 105];
-        } else if (row.resultStatus === 'Failed') {
-          data.cell.styles.textColor = [220, 38, 38];
-        } else {
-          data.cell.styles.textColor = [100, 116, 139];
-        }
-      }
-
-      // Exam Type column
-      if (data.column.index === 6 && isResit) {
-        data.cell.styles.textColor = [180, 83, 9];
-        data.cell.styles.fontStyle = 'bold';
       }
     },
   });

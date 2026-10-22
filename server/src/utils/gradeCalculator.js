@@ -72,3 +72,63 @@ export function calculateResultStatus(marks, currentStatus = '') {
   return numeric >= PASSING_SCORE ? 'Passed' : 'Failed';
 }
 
+/**
+ * Determines whether a student is eligible for a repeat examination.
+ * Rule: Must have attempted the exam (not null) and scored below 60.
+ * @param {number|string|null|undefined} originalMarks
+ * @param {string} [currentStatus]
+ * @returns {boolean}
+ */
+export function isRepeatEligible(originalMarks, currentStatus = '') {
+  if (String(currentStatus).toUpperCase() === 'ABSENT') return false;
+  if (originalMarks === null || originalMarks === undefined || originalMarks === '') {
+    return false;
+  }
+  const numeric = Number(originalMarks);
+  return Number.isFinite(numeric) && numeric >= 0 && numeric < PASSING_SCORE;
+}
+
+/**
+ * Calculates the final examination result combining original and repeat marks.
+ *
+ * Scenarios:
+ * 1. Original passed (>= 60) -> 'Passed'
+ * 2. Original failed (< 60), no repeat marks -> 'Failed'
+ * 3. Original failed (< 60), repeat passed (>= 60) -> 'Passed (Repeat)'
+ * 4. Original failed (< 60), repeat failed (< 60) -> 'Failed (Repeat)'
+ * 5. Original missing / pending -> 'Pending'
+ *
+ * @param {number|string|null|undefined} originalMarks
+ * @param {number|string|null|undefined} repeatMarks
+ * @param {string} [currentStatus]
+ * @returns {'Passed'|'Failed'|'Passed (Repeat)'|'Failed (Repeat)'|'Pending'|'Absent'}
+ */
+export function calculateFinalExamResult(originalMarks, repeatMarks = null, currentStatus = '') {
+  if (String(currentStatus).toUpperCase() === 'ABSENT') return 'Absent';
+
+  if (originalMarks === null || originalMarks === undefined || originalMarks === '') {
+    return 'Pending';
+  }
+
+  const origNum = Number(originalMarks);
+  if (!Number.isFinite(origNum) || origNum < 0 || origNum > 100) {
+    return 'Pending';
+  }
+
+  // Original exam passed
+  if (origNum >= PASSING_SCORE) {
+    return 'Passed';
+  }
+
+  // Original exam failed (< 60)
+  if (repeatMarks !== null && repeatMarks !== undefined && repeatMarks !== '') {
+    const repNum = Number(repeatMarks);
+    if (Number.isFinite(repNum) && repNum >= 0 && repNum <= 100) {
+      return repNum >= PASSING_SCORE ? 'Passed (Repeat)' : 'Failed (Repeat)';
+    }
+  }
+
+  return 'Failed';
+}
+
+
