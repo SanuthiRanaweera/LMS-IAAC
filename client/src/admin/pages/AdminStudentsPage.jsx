@@ -2282,7 +2282,7 @@ export default function AdminStudentsPage() {
                 No students match these filters.
               </div>
             ) : (
-              <div className="mt-4 overflow-x-auto">
+              <div className="mt-4 overflow-x-auto pb-20">
                 <table className="w-full min-w-[860px] text-left text-sm">
                   <thead className="text-xs text-slate-500">
                     <tr>
@@ -2310,13 +2310,22 @@ export default function AdminStudentsPage() {
 
                   <tbody className="divide-y divide-slate-200">
                     {filteredStudents.map(
-                      (student) => (
-                        <tr
-                          key={
-                            student.id
-                          }
-                          className="text-slate-800"
-                        >
+                      (student, index) => {
+                        const isNearBottom =
+                          index > 0 &&
+                          index >= filteredStudents.length - 2;
+
+                        return (
+                          <tr
+                            key={
+                              student.id
+                            }
+                            className={`text-slate-800 ${
+                              openActionsFor === student.id
+                                ? 'relative z-20'
+                                : ''
+                            }`}
+                          >
                           <td className="py-3 font-semibold">
                             {
                               student.fullName
@@ -2372,7 +2381,13 @@ export default function AdminStudentsPage() {
                                     }
                                   />
 
-                                  <div className="absolute right-0 z-20 mt-1 w-36 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left shadow-lg">
+                                  <div
+                                    className={`absolute right-0 z-20 w-36 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left shadow-lg ${
+                                      isNearBottom
+                                        ? 'bottom-full mb-1'
+                                        : 'top-full mt-1'
+                                    }`}
+                                  >
                                     <button
                                       type="button"
                                       onClick={() =>
@@ -2431,7 +2446,8 @@ export default function AdminStudentsPage() {
                             </div>
                           </td>
                         </tr>
-                      )
+                        );
+                      }
                     )}
                   </tbody>
                 </table>
