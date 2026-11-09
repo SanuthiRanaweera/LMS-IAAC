@@ -4,6 +4,8 @@ import {
   adminCreateFeedbackRequest,
   adminListFeedbackRequests,
   adminUpdateFeedbackRequestStatus,
+  adminUpdateFeedbackRequest,
+  adminDeleteFeedbackRequest,
   adminGetFeedbackStats,
   adminGetAcademicOptions,
   adminGenerateFeedbackSummary,
@@ -14,6 +16,7 @@ import {
   adminFlagFeedback,
   adminGetBadWords,
   adminListFeedback,
+  adminUpdateFeedback,
   adminModerationLog,
   adminRemoveFeedback,
   adminSendWeeklyReport,
@@ -31,9 +34,11 @@ adminFeedbackRouter.get('/stats', adminGetFeedbackStats);
 // Academic hierarchy options (Branch, Intake, Batch, Module)
 adminFeedbackRouter.get('/academic-options', adminGetAcademicOptions);
 
-// Feedback Request endpoints
+// Feedback Request endpoints (Create, List, Edit, Delete, Status Toggle)
 adminFeedbackRouter.post('/requests', adminCreateFeedbackRequest);
 adminFeedbackRouter.get('/requests', adminListFeedbackRequests);
+adminFeedbackRouter.put('/requests/:id', adminUpdateFeedbackRequest);
+adminFeedbackRouter.delete('/requests/:id', adminDeleteFeedbackRequest);
 adminFeedbackRouter.patch('/requests/:id/status', adminUpdateFeedbackRequestStatus);
 
 // Feedback Summary generation, approval & delivery
@@ -43,8 +48,9 @@ adminFeedbackRouter.put('/summaries/:id', adminUpdateFeedbackSummary);
 adminFeedbackRouter.patch('/summaries/:id/approve', adminApproveFeedbackSummary);
 adminFeedbackRouter.post('/summaries/:id/send', adminSendFeedbackSummary);
 
-// Submissions listing & moderation
+// Submissions listing, editing & moderation/deletion
 adminFeedbackRouter.get('/', adminListFeedback);
+adminFeedbackRouter.put('/:id', adminUpdateFeedback);
 adminFeedbackRouter.patch('/:id/flag', adminFlagFeedback);
 adminFeedbackRouter.delete('/:id', adminRemoveFeedback);
 adminFeedbackRouter.get('/moderation/log', adminModerationLog);

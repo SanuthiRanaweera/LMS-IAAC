@@ -21,6 +21,8 @@ import {
   LoaderCircle,
   Flag,
   Trash2,
+  Pencil,
+  Save,
 } from 'lucide-react';
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut, ApiError } from '../../api/http.js';
 import { exportFeedbackReportToPdf } from '../../utils/exportFeedbackReport.js';
@@ -110,6 +112,61 @@ export default function AdminFeedbackDashboardPage() {
   const [summaryRecommendations, setSummaryRecommendations] = useState('');
   const [summaryStrengths, setSummaryStrengths] = useState([]);
   const [summaryImprovements, setSummaryImprovements] = useState([]);
+
+  // Edit & Delete Request State
+  const [editRequestModalOpen, setEditRequestModalOpen] = useState(false);
+  const [editingRequestId, setEditingRequestId] = useState(null);
+  const [editRequestLoading, setEditRequestLoading] = useState(false);
+  const [editRequestError, setEditRequestError] = useState('');
+  const [editCustomBatchMode, setEditCustomBatchMode] = useState(false);
+  const [editRequestForm, setEditRequestForm] = useState({
+    branchId: '',
+    intakeId: '',
+    batchId: '',
+    diplomaId: '',
+    moduleId: '',
+    lecturerId: '',
+    feedbackWeek: 'Week 1',
+    startDate: '',
+    endDate: '',
+    status: 'Active',
+    targetStudents: 'all',
+    isRecurring: false,
+  });
+
+  const [deleteRequestModalOpen, setDeleteRequestModalOpen] = useState(false);
+  const [requestToDelete, setRequestToDelete] = useState(null);
+  const [deleteRequestLoading, setDeleteRequestLoading] = useState(false);
+
+  // Edit & Delete Submission State
+  const [editSubmissionModalOpen, setEditSubmissionModalOpen] = useState(false);
+  const [editingSubmission, setEditingSubmission] = useState(null);
+  const [editSubmissionLoading, setEditSubmissionLoading] = useState(false);
+  const [editSubmissionError, setEditSubmissionError] = useState('');
+  const [editSubmissionForm, setEditSubmissionForm] = useState({
+    rating: 5,
+    ratings: {
+      teachingClarity: 5,
+      subjectKnowledge: 5,
+      communication: 5,
+      studentEngagement: 5,
+      overallExperience: 5,
+    },
+    comment: '',
+    positiveFeedback: '',
+    improvementFeedback: '',
+    learningDifficulties: '',
+    concerns: '',
+    suggestions: '',
+    flagged: false,
+    status: 'active',
+  });
+
+  const [deleteSubmissionModalOpen, setDeleteSubmissionModalOpen] = useState(false);
+  const [submissionToDelete, setSubmissionToDelete] = useState(null);
+  const [deletePermanent, setDeletePermanent] = useState(false);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleteSubmissionLoading, setDeleteSubmissionLoading] = useState(false);
 
   // Load KPI Stats
   const loadStats = () => {
@@ -206,6 +263,204 @@ export default function AdminFeedbackDashboardPage() {
       ...prev,
       diplomaId: e.target.value,
     }));
+  };
+
+  // Edit Request Cascading Hierarchy
+  const editSelectedBranchObj = useMemo(() => {
+    if (!editRequestForm.branchId) return null;
+    return (
+      branches.find(
+        (b) =>
+          String(b.id || '') === String(editRequestForm.branchId) ||
+          String(b.name || '') === String(editRequestForm.branchId)
+      ) || null
+    );
+  }, [branches, editRequestForm.branchId]);
+
+  const editAvailableIntakes = useMemo(() => {
+    if (!editSelectedBranchObj) return [];
+    return Array.isArray(editSelectedBranchObj.intakes) ? editSelectedBranchObj.intakes : [];
+  }, [editSelectedBranchObj]);
+
+  const editSelectedIntakeObj = useMemo(() => {
+    if (!editRequestForm.intakeId || !editAvailableIntakes.length) return null;
+    return (
+      editAvailableIntakes.find(
+        (i) =>
+          String(i.id || '') === String(editRequestForm.intakeId) ||
+          String(i.name || '') === String(editRequestForm.intakeId)
+      ) || null
+    );
+  }, [editAvailableIntakes, editRequestForm.intakeId]);
+
+  const editAvailableBatches = useMemo(() => {
+    if (!editSelectedIntakeObj) return [];
+    return Array.isArray(editSelectedIntakeObj.batches) ? editSelectedIntakeObj.batches : [];
+  }, [editSelectedIntakeObj]);
+
+  const handleEditBranchChange = (e) => {
+    const val = e.target.value;
+    setEditRequestForm((prev) => ({
+      ...prev,
+      branchId: val,
+      intakeId: '',
+      batchId: '',
+    }));
+  };
+
+  const handleEditIntakeChange = (e) => {
+    const val = e.target.value;
+    const chosen = editAvailableIntakes.find(
+      (i) => String(i.id || '') === String(val) || String(i.name || '') === String(val)
+    );
+    const subBatches = Array.isArray(chosen?.batches) ? chosen.batches : [];
+    const firstBatch = subBatches[0]?.id || chosen?.id || val;
+    setEditRequestForm((prev) => ({
+      ...prev,
+      intakeId: val,
+      batchId: firstBatch,
+    }));
+  };
+
+  const handleOpenEditRequest = (reqItem) => {
+    setEditingRequestId(reqItem.id);
+    setEditRequestForm({
+      branchId: reqItem.branchId || '',
+      intakeId: reqItem.intakeId || '',
+      batchId: reqItem.batchId || '',
+      diplomaId: reqItem.diplomaId || '',
+      moduleId: reqItem.moduleId || '',
+      lecturerId: reqItem.lecturer?.id || reqItem.lecturer?._id || reqItem.lecturer || '',
+      feedbackWeek: reqItem.feedbackWeek || 'Week 1',
+      startDate: reqItem.startDate ? new Date(reqItem.startDate).toISOString().split('T')[0] : '',
+      endDate: reqItem.endDate ? new Date(reqItem.endDate).toISOString().split('T')[0] : '',
+      status: reqItem.status || 'Active',
+      targetStudents: reqItem.targetStudents || 'all',
+      isRecurring: Boolean(reqItem.isRecurring),
+    });
+    setEditCustomBatchMode(false);
+    setEditRequestError('');
+    setEditRequestModalOpen(true);
+  };
+
+  const handleSaveEditRequest = async (e) => {
+    e.preventDefault();
+    if (!editingRequestId) return;
+    setEditRequestLoading(true);
+    setEditRequestError('');
+    try {
+      const payload = {
+        ...editRequestForm,
+        batchId: editRequestForm.batchId || editRequestForm.intakeId,
+      };
+      await apiPut(`/api/admin/feedback/requests/${editingRequestId}`, payload);
+      setSuccessMessage('Feedback request updated successfully.');
+      setEditRequestModalOpen(false);
+      loadRequests();
+      loadStats();
+      setTimeout(() => setSuccessMessage(''), 4000);
+    } catch (err) {
+      setEditRequestError(err?.message || 'Failed to update feedback request');
+    } finally {
+      setEditRequestLoading(false);
+    }
+  };
+
+  const handleOpenDeleteRequest = (reqItem) => {
+    setRequestToDelete(reqItem);
+    setDeleteRequestModalOpen(true);
+  };
+
+  const handleConfirmDeleteRequest = async () => {
+    if (!requestToDelete) return;
+    setDeleteRequestLoading(true);
+    try {
+      await apiDelete(`/api/admin/feedback/requests/${requestToDelete.id}`);
+      setSuccessMessage('Feedback request deleted successfully.');
+      setDeleteRequestModalOpen(false);
+      setRequestToDelete(null);
+      loadRequests();
+      loadStats();
+      setTimeout(() => setSuccessMessage(''), 4000);
+    } catch (err) {
+      setError(err?.message || 'Failed to delete feedback request');
+    } finally {
+      setDeleteRequestLoading(false);
+    }
+  };
+
+  const handleOpenEditSubmission = (subItem) => {
+    setEditingSubmission(subItem);
+    setEditSubmissionForm({
+      rating: subItem.rating || 5,
+      ratings: subItem.ratings || {
+        teachingClarity: subItem.rating || 5,
+        subjectKnowledge: subItem.rating || 5,
+        communication: subItem.rating || 5,
+        studentEngagement: subItem.rating || 5,
+        overallExperience: subItem.rating || 5,
+      },
+      comment: subItem.comment || '',
+      positiveFeedback: subItem.positiveFeedback || '',
+      improvementFeedback: subItem.improvementFeedback || '',
+      learningDifficulties: subItem.learningDifficulties || '',
+      concerns: subItem.concerns || '',
+      suggestions: subItem.suggestions || '',
+      flagged: Boolean(subItem.flagged),
+      status: subItem.status || 'active',
+    });
+    setEditSubmissionError('');
+    setEditSubmissionModalOpen(true);
+  };
+
+  const handleSaveEditSubmission = async (e) => {
+    e.preventDefault();
+    if (!editingSubmission) return;
+    setEditSubmissionLoading(true);
+    setEditSubmissionError('');
+    try {
+      await apiPut(`/api/admin/feedback/${editingSubmission.id}`, editSubmissionForm);
+      setSuccessMessage('Student feedback submission updated successfully.');
+      setEditSubmissionModalOpen(false);
+      setEditingSubmission(null);
+      loadSubmissions();
+      loadStats();
+      setTimeout(() => setSuccessMessage(''), 4000);
+    } catch (err) {
+      setEditSubmissionError(err?.message || 'Failed to update feedback');
+    } finally {
+      setEditSubmissionLoading(false);
+    }
+  };
+
+  const handleOpenDeleteSubmission = (subItem) => {
+    setSubmissionToDelete(subItem);
+    setDeleteReason('');
+    setDeletePermanent(false);
+    setDeleteSubmissionModalOpen(true);
+  };
+
+  const handleConfirmDeleteSubmission = async () => {
+    if (!submissionToDelete) return;
+    setDeleteSubmissionLoading(true);
+    try {
+      const url = `/api/admin/feedback/${submissionToDelete.id}?reason=${encodeURIComponent(
+        deleteReason || 'Removed by admin'
+      )}&permanent=${deletePermanent ? 'true' : 'false'}`;
+      await apiDelete(url);
+      setSuccessMessage(
+        deletePermanent ? 'Feedback permanently deleted.' : 'Feedback removed and hidden from reports.'
+      );
+      setDeleteSubmissionModalOpen(false);
+      setSubmissionToDelete(null);
+      loadSubmissions();
+      loadStats();
+      setTimeout(() => setSuccessMessage(''), 4000);
+    } catch (err) {
+      setError(err?.message || 'Failed to remove feedback');
+    } finally {
+      setDeleteSubmissionLoading(false);
+    }
   };
 
   // Fetch Intakes and Batches when Branch changes in Create Modal
@@ -837,6 +1092,24 @@ export default function AdminFeedbackDashboardPage() {
                           >
                             <FileDown className="h-4 w-4" />
                           </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditRequest(r)}
+                            title="Edit Feedback Request"
+                            className="rounded-lg bg-amber-50 p-1.5 text-amber-700 hover:bg-amber-100 transition cursor-pointer"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDeleteRequest(r)}
+                            title="Delete Feedback Request"
+                            className="rounded-lg bg-rose-50 p-1.5 text-rose-600 hover:bg-rose-100 transition cursor-pointer"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -860,12 +1133,13 @@ export default function AdminFeedbackDashboardPage() {
                   <th className="py-3 px-4">Comment / Feedback</th>
                   <th className="py-3 px-4 text-center">Submitted</th>
                   <th className="py-3 px-4 text-center">Status</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {submissions.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
+                    <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
                       No student submissions found matching the criteria.
                     </td>
                   </tr>
@@ -901,11 +1175,35 @@ export default function AdminFeedbackDashboardPage() {
                           <span className="rounded-full bg-rose-100 border border-rose-200 text-rose-700 px-2 py-0.5 text-[10px] font-bold">
                             Flagged
                           </span>
+                        ) : s.status === 'removed' ? (
+                          <span className="rounded-full bg-slate-100 text-slate-500 px-2 py-0.5 text-[10px] font-medium line-through">
+                            Removed
+                          </span>
                         ) : (
                           <span className="rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[10px] font-semibold">
                             Active
                           </span>
                         )}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditSubmission(s)}
+                            title="Edit Feedback"
+                            className="rounded-lg bg-blue-50 p-1.5 text-[#003580] hover:bg-blue-100 transition cursor-pointer"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDeleteSubmission(s)}
+                            title="Delete / Remove Feedback"
+                            className="rounded-lg bg-rose-50 p-1.5 text-rose-600 hover:bg-rose-100 transition cursor-pointer"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -1388,6 +1686,706 @@ export default function AdminFeedbackDashboardPage() {
                     <span>{activeSummary.status === 'Sent' ? 'Delivered' : 'Send to Lecturer'}</span>
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          EDIT FEEDBACK REQUEST MODAL
+      ========================================================= */}
+      {editRequestModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#003580] to-blue-900 px-6 py-4 text-white">
+              <div className="flex items-center gap-2.5">
+                <Pencil className="h-5 w-5 text-sky-300" />
+                <h2 className="text-base font-bold">Edit Weekly Feedback Request</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditRequestModalOpen(false)}
+                className="text-white/80 hover:text-white font-bold"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <form onSubmit={handleSaveEditRequest} className="p-6 overflow-y-auto space-y-4 text-xs">
+              {editRequestError && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-800 font-semibold flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{editRequestError}</span>
+                </div>
+              )}
+
+              {/* Row 1: Academic Hierarchy (3-Column Selector Matching Image 2) */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {/* Branch */}
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Branch <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={editRequestForm.branchId}
+                    onChange={handleEditBranchChange}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#003580] focus:ring-1 focus:ring-[#003580]"
+                  >
+                    <option value="">Select Branch</option>
+                    {branches.map((b) => (
+                      <option key={b.id || b.name} value={b.id || b.name}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Intake */}
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Intake <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    required
+                    disabled={!editRequestForm.branchId}
+                    value={editRequestForm.intakeId}
+                    onChange={handleEditIntakeChange}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#003580] focus:ring-1 focus:ring-[#003580] disabled:bg-slate-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="">
+                      {!editRequestForm.branchId
+                        ? 'Select Branch First'
+                        : editAvailableIntakes.length === 0
+                        ? 'No Intakes Found'
+                        : 'Select Intake'}
+                    </option>
+                    {editAvailableIntakes.map((i) => (
+                      <option key={i.id || i.name} value={i.id || i.name}>
+                        {i.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Diploma */}
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Diploma <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={editRequestForm.diplomaId}
+                    onChange={(e) => setEditRequestForm({ ...editRequestForm, diplomaId: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#003580] focus:ring-1 focus:ring-[#003580]"
+                  >
+                    <option value="">Select Diploma</option>
+                    {diplomasList.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Optional Batch Sub-group or Custom Batch */}
+              {(editAvailableBatches.length > 0 || editCustomBatchMode) ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-700 text-[11px]">
+                      Student Batch (Sub-group)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setEditCustomBatchMode(!editCustomBatchMode)}
+                      className="text-[10px] font-semibold text-[#003580] hover:underline cursor-pointer"
+                    >
+                      {editCustomBatchMode ? 'Select from list' : '+ Custom Batch'}
+                    </button>
+                  </div>
+
+                  {editCustomBatchMode ? (
+                    <input
+                      type="text"
+                      placeholder="e.g. BATCH-2026-AV1"
+                      value={editRequestForm.batchId}
+                      onChange={(e) => setEditRequestForm({ ...editRequestForm, batchId: e.target.value })}
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-[#003580]"
+                    />
+                  ) : (
+                    <select
+                      value={editRequestForm.batchId}
+                      onChange={(e) => setEditRequestForm({ ...editRequestForm, batchId: e.target.value })}
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-[#003580]"
+                    >
+                      <option value={editRequestForm.intakeId}>
+                        All Students in {editSelectedIntakeObj?.name || 'Intake'}
+                      </option>
+                      {editAvailableBatches.map((b) => (
+                        <option key={b.id || b.name} value={b.id || b.name}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              ) : (
+                <div className="flex justify-end -mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditCustomBatchMode(true)}
+                    className="text-[10px] font-semibold text-[#003580] hover:underline cursor-pointer"
+                  >
+                    + Custom Batch Code
+                  </button>
+                </div>
+              )}
+
+              {/* Row 2: Module & Lecturer */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Module / Subject <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    list="edit-modules-datalist"
+                    placeholder="e.g. Aviation Safety Management"
+                    value={editRequestForm.moduleId}
+                    onChange={(e) => setEditRequestForm({ ...editRequestForm, moduleId: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#003580] focus:ring-1 focus:ring-[#003580]"
+                  />
+                  <datalist id="edit-modules-datalist">
+                    {modulesList.map((m) => (
+                      <option key={m} value={m} />
+                    ))}
+                  </datalist>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Assigned Lecturer <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={editRequestForm.lecturerId}
+                    onChange={(e) => setEditRequestForm({ ...editRequestForm, lecturerId: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#003580] focus:ring-1 focus:ring-[#003580]"
+                  >
+                    <option value="">Select Lecturer</option>
+                    {lecturersList.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.lecturerId ? `${l.lecturerId} – ` : ''}{l.name} {l.subject ? `(${l.subject})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Row 3: Week, Dates, Status */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Feedback Week</label>
+                  <select
+                    value={editRequestForm.feedbackWeek}
+                    onChange={(e) => setEditRequestForm({ ...editRequestForm, feedbackWeek: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none focus:border-blue-500"
+                  >
+                    {['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5', 'Week 6', 'Week 7', 'Week 8'].map((w) => (
+                      <option key={w} value={w}>{w}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={editRequestForm.startDate}
+                    onChange={(e) => setEditRequestForm({ ...editRequestForm, startDate: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Closing Deadline</label>
+                  <input
+                    type="date"
+                    required
+                    value={editRequestForm.endDate}
+                    onChange={(e) => setEditRequestForm({ ...editRequestForm, endDate: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Request Status</label>
+                  <select
+                    value={editRequestForm.status}
+                    onChange={(e) => setEditRequestForm({ ...editRequestForm, status: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none focus:border-blue-500 font-bold"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Closed">Closed</option>
+                    <option value="Draft">Draft</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Recurring Toggle */}
+              <label className="flex items-center gap-2 pt-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editRequestForm.isRecurring}
+                  onChange={(e) => setEditRequestForm({ ...editRequestForm, isRecurring: e.target.checked })}
+                  className="rounded border-slate-300 text-[#003580]"
+                />
+                <span className="font-semibold text-slate-700">
+                  Enable automatic weekly recurrence for this lecture
+                </span>
+              </label>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setEditRequestModalOpen(false)}
+                  className="rounded-xl border border-slate-300 px-4 py-2 font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editRequestLoading}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#003580] hover:bg-blue-900 px-5 py-2 font-bold text-white shadow-md transition disabled:opacity-60 cursor-pointer"
+                >
+                  {editRequestLoading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  <span>Save Changes</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          DELETE FEEDBACK REQUEST MODAL
+      ========================================================= */}
+      {deleteRequestModalOpen && requestToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-rose-100 bg-rose-50 px-6 py-4 text-rose-900">
+              <div className="flex items-center gap-2.5">
+                <Trash2 className="h-5 w-5 text-rose-600" />
+                <h2 className="text-base font-bold">Delete Feedback Request</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeleteRequestModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4 text-xs">
+              <p className="text-slate-700">
+                Are you sure you want to delete this weekly feedback request?
+              </p>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1.5 text-[11px]">
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-semibold">Lecturer:</span>
+                  <span className="font-bold text-slate-900">{requestToDelete.lecturer?.name || '—'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-semibold">Module:</span>
+                  <span className="font-bold text-slate-800">{requestToDelete.moduleId}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-semibold">Batch / Week:</span>
+                  <span className="font-mono text-slate-800">{requestToDelete.batchId} ({requestToDelete.feedbackWeek})</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-semibold">Responses:</span>
+                  <span className="font-extrabold text-[#003580]">{requestToDelete.responseCount || 0} received</span>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-800 text-[11px] flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  Deleting this request will also remove all associated student responses. This action cannot be undone.
+                </span>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDeleteRequestModalOpen(false)}
+                  disabled={deleteRequestLoading}
+                  className="rounded-xl border border-slate-300 px-4 py-2 font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDeleteRequest}
+                  disabled={deleteRequestLoading}
+                  className="inline-flex items-center gap-2 rounded-xl bg-rose-600 hover:bg-rose-700 px-5 py-2 font-bold text-white shadow-md transition disabled:opacity-60 cursor-pointer"
+                >
+                  {deleteRequestLoading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  <span>Confirm Delete</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          EDIT FEEDBACK SUBMISSION MODAL
+      ========================================================= */}
+      {editSubmissionModalOpen && editingSubmission && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden max-h-[92vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#003580] to-blue-900 px-6 py-4 text-white">
+              <div className="flex items-center gap-2.5">
+                <Pencil className="h-5 w-5 text-sky-300" />
+                <h2 className="text-base font-bold">Edit Student Feedback Submission</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditSubmissionModalOpen(false)}
+                className="text-white/80 hover:text-white font-bold"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <form onSubmit={handleSaveEditSubmission} className="p-6 overflow-y-auto space-y-4 text-xs">
+              {editSubmissionError && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-800 font-semibold flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{editSubmissionError}</span>
+                </div>
+              )}
+
+              {/* Student & Lecturer Summary Card */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block">Student</span>
+                  <span className="font-extrabold text-slate-900 text-xs block">{editingSubmission.student?.name || 'Anonymous'}</span>
+                  <span className="font-mono text-[10px] text-slate-500">{editingSubmission.student?.studentId}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block">Lecturer</span>
+                  <span className="font-bold text-slate-900 text-xs block">{editingSubmission.lecturer?.name || '—'}</span>
+                  <span className="font-mono text-[10px] text-[#003580]">{editingSubmission.lecturer?.lecturerId}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block">Week / Module</span>
+                  <span className="font-semibold text-slate-800 text-xs block">{editingSubmission.weekRef}</span>
+                  <span className="text-[10px] text-slate-500">{editingSubmission.feedbackRequest?.module || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block">Overall Rating</span>
+                  <div className="inline-flex items-center gap-1 font-bold text-amber-700 mt-1">
+                    <Star className="h-4 w-4 fill-amber-400 text-amber-500" />
+                    <span className="text-sm font-extrabold">{editSubmissionForm.rating} / 5</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Overall Rating Slider / Select */}
+              <div className="rounded-xl border border-slate-200 p-3">
+                <label className="block font-bold text-slate-800 mb-2">Overall Teaching Rating (1 to 5 Stars)</label>
+                <div className="flex items-center gap-3">
+                  {[1, 2, 3, 4, 5].map((starVal) => (
+                    <button
+                      key={starVal}
+                      type="button"
+                      onClick={() => setEditSubmissionForm({ ...editSubmissionForm, rating: starVal })}
+                      className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 font-bold transition cursor-pointer ${
+                        editSubmissionForm.rating === starVal
+                          ? 'bg-amber-100 border border-amber-400 text-amber-900 shadow-xs'
+                          : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      <Star className={`h-4 w-4 ${editSubmissionForm.rating >= starVal ? 'fill-amber-400 text-amber-500' : 'text-slate-300'}`} />
+                      <span>{starVal}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 5-Category Rating Breakdown */}
+              <div>
+                <label className="block font-bold text-slate-800 mb-1.5">Category Ratings Breakdown (1-5)</label>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  {[
+                    { key: 'teachingClarity', label: 'Clarity' },
+                    { key: 'subjectKnowledge', label: 'Knowledge' },
+                    { key: 'communication', label: 'Communication' },
+                    { key: 'studentEngagement', label: 'Engagement' },
+                    { key: 'overallExperience', label: 'Experience' },
+                  ].map((cat) => (
+                    <div key={cat.key} className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-center">
+                      <span className="text-[10px] font-semibold text-slate-600 block mb-1">{cat.label}</span>
+                      <select
+                        value={editSubmissionForm.ratings?.[cat.key] ?? editSubmissionForm.rating}
+                        onChange={(e) =>
+                          setEditSubmissionForm({
+                            ...editSubmissionForm,
+                            ratings: {
+                              ...editSubmissionForm.ratings,
+                              [cat.key]: Number(e.target.value),
+                            },
+                          })
+                        }
+                        className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-center font-bold text-xs"
+                      >
+                        {[5, 4, 3, 2, 1].map((n) => (
+                          <option key={n} value={n}>{n} ★</option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Comments & Written Feedback */}
+              <div className="space-y-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">General Comment</label>
+                  <textarea
+                    rows={2}
+                    value={editSubmissionForm.comment}
+                    onChange={(e) => setEditSubmissionForm({ ...editSubmissionForm, comment: e.target.value })}
+                    placeholder="General student comments..."
+                    className="w-full rounded-xl border border-slate-300 p-2.5 text-xs text-slate-800 outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Positive Feedback (Strengths)</label>
+                    <textarea
+                      rows={2}
+                      value={editSubmissionForm.positiveFeedback}
+                      onChange={(e) => setEditSubmissionForm({ ...editSubmissionForm, positiveFeedback: e.target.value })}
+                      placeholder="What the lecturer did well..."
+                      className="w-full rounded-xl border border-slate-300 p-2 text-xs text-slate-800 outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Areas for Improvement</label>
+                    <textarea
+                      rows={2}
+                      value={editSubmissionForm.improvementFeedback}
+                      onChange={(e) => setEditSubmissionForm({ ...editSubmissionForm, improvementFeedback: e.target.value })}
+                      placeholder="Suggestions for teaching improvement..."
+                      className="w-full rounded-xl border border-slate-300 p-2 text-xs text-slate-800 outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Learning Difficulties</label>
+                    <textarea
+                      rows={2}
+                      value={editSubmissionForm.learningDifficulties}
+                      onChange={(e) => setEditSubmissionForm({ ...editSubmissionForm, learningDifficulties: e.target.value })}
+                      placeholder="Specific difficulties faced..."
+                      className="w-full rounded-xl border border-slate-300 p-2 text-xs text-slate-800 outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Student Suggestions</label>
+                    <textarea
+                      rows={2}
+                      value={editSubmissionForm.suggestions}
+                      onChange={(e) => setEditSubmissionForm({ ...editSubmissionForm, suggestions: e.target.value })}
+                      placeholder="Additional suggestions..."
+                      className="w-full rounded-xl border border-slate-300 p-2 text-xs text-slate-800 outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Moderation Controls (Flagged & Status) */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 flex flex-wrap items-center justify-between gap-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editSubmissionForm.flagged}
+                    onChange={(e) => setEditSubmissionForm({ ...editSubmissionForm, flagged: e.target.checked })}
+                    className="rounded border-slate-300 text-rose-600"
+                  />
+                  <span className="font-semibold text-slate-800">
+                    Flag this submission for administrative review
+                  </span>
+                </label>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500 font-semibold">Status:</span>
+                  <select
+                    value={editSubmissionForm.status}
+                    onChange={(e) => setEditSubmissionForm({ ...editSubmissionForm, status: e.target.value })}
+                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-bold"
+                  >
+                    <option value="active">Active (Visible)</option>
+                    <option value="removed">Removed (Hidden)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setEditSubmissionModalOpen(false)}
+                  className="rounded-xl border border-slate-300 px-4 py-2 font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editSubmissionLoading}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#003580] hover:bg-blue-900 px-5 py-2 font-bold text-white shadow-md transition disabled:opacity-60 cursor-pointer"
+                >
+                  {editSubmissionLoading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  <span>Save Changes</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          DELETE FEEDBACK SUBMISSION MODAL
+      ========================================================= */}
+      {deleteSubmissionModalOpen && submissionToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-rose-100 bg-rose-50 px-6 py-4 text-rose-900">
+              <div className="flex items-center gap-2.5">
+                <Trash2 className="h-5 w-5 text-rose-600" />
+                <h2 className="text-base font-bold">Remove / Delete Feedback</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeleteSubmissionModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4 text-xs">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1.5 text-[11px]">
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-semibold">Student:</span>
+                  <span className="font-bold text-slate-900">{submissionToDelete.student?.name || 'Anonymous'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-semibold">Lecturer:</span>
+                  <span className="font-bold text-slate-800">{submissionToDelete.lecturer?.name || '—'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-semibold">Rating:</span>
+                  <span className="font-bold text-amber-700">{submissionToDelete.rating} ★</span>
+                </div>
+                {submissionToDelete.comment && (
+                  <div className="pt-1 text-slate-600 italic border-t border-slate-200">
+                    "{submissionToDelete.comment.slice(0, 100)}..."
+                  </div>
+                )}
+              </div>
+
+              {/* Removal Type Choice */}
+              <div className="space-y-2">
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="deleteType"
+                    checked={!deletePermanent}
+                    onChange={() => setDeletePermanent(false)}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <span className="font-bold text-slate-800 block">Soft Remove (Recommended)</span>
+                    <span className="text-[11px] text-slate-500 block">
+                      Hides this feedback from lecturer summaries and reports, while preserving an audit log.
+                    </span>
+                  </div>
+                </label>
+
+                {!deletePermanent && (
+                  <input
+                    type="text"
+                    value={deleteReason}
+                    onChange={(e) => setDeleteReason(e.target.value)}
+                    placeholder="Reason for removal (e.g. Inappropriate language)"
+                    className="w-full rounded-xl border border-slate-300 p-2 text-xs text-slate-800 outline-none focus:border-blue-500"
+                  />
+                )}
+
+                <label className="flex items-start gap-2 cursor-pointer pt-1">
+                  <input
+                    type="radio"
+                    name="deleteType"
+                    checked={deletePermanent}
+                    onChange={() => setDeletePermanent(true)}
+                    className="mt-0.5 text-rose-600"
+                  />
+                  <div>
+                    <span className="font-bold text-rose-700 block">Permanently Delete</span>
+                    <span className="text-[11px] text-slate-500 block">
+                      Completely removes this feedback from the database.
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setDeleteSubmissionModalOpen(false)}
+                  disabled={deleteSubmissionLoading}
+                  className="rounded-xl border border-slate-300 px-4 py-2 font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDeleteSubmission}
+                  disabled={deleteSubmissionLoading}
+                  className="inline-flex items-center gap-2 rounded-xl bg-rose-600 hover:bg-rose-700 px-5 py-2 font-bold text-white shadow-md transition disabled:opacity-60 cursor-pointer"
+                >
+                  {deleteSubmissionLoading ? (
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                  <span>{deletePermanent ? 'Permanently Delete' : 'Remove Feedback'}</span>
+                </button>
               </div>
             </div>
           </div>

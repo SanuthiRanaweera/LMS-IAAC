@@ -453,6 +453,133 @@ export async function adminUpdateFeedbackRequestStatus(req, res, next) {
   }
 }
 
+export async function adminUpdateFeedbackRequest(req, res, next) {
+  try {
+    const id = safeTrim(req.params?.id);
+    if (!id) return res.status(400).json({ message: 'Feedback request ID is required' });
+
+    const request = await FeedbackRequest.findById(id);
+    if (!request) return res.status(404).json({ message: 'Feedback request not found' });
+
+    // Branch access check for staff admin
+    if (req.adminAuth?.role === 'staff' && req.adminAuth?.branchId) {
+      if (request.branchId !== req.adminAuth.branchId) {
+        return res.status(403).json({ message: 'Unauthorized for this branch' });
+      }
+    }
+
+    const {
+      branchId,
+      intakeId,
+      batchId,
+      diplomaId,
+      moduleId,
+      lecturerId,
+      feedbackWeek,
+      startDate,
+      endDate,
+      status,
+      targetStudents,
+      selectedStudentIds,
+      isRecurring,
+      recurringDay,
+    } = req.body || {};
+
+    if (branchId !== undefined) {
+      const cleanBranch = safeTrim(branchId);
+      if (!cleanBranch) return res.status(400).json({ message: 'Branch cannot be empty' });
+      if (req.adminAuth?.role === 'staff' && req.adminAuth?.branchId && cleanBranch !== req.adminAuth.branchId) {
+        return res.status(403).json({ message: 'You can only assign requests to your branch' });
+      }
+      request.branchId = cleanBranch;
+    }
+
+    if (intakeId !== undefined) request.intakeId = safeTrim(intakeId);
+    if (batchId !== undefined) {
+      const cleanBatch = safeTrim(batchId);
+      if (cleanBatch) request.batchId = cleanBatch;
+    }
+    if (diplomaId !== undefined) request.diplomaId = safeTrim(diplomaId);
+    if (moduleId !== undefined) {
+      const cleanModule = safeTrim(moduleId);
+      if (cleanModule) request.moduleId = cleanModule;
+    }
+
+    if (lecturerId !== undefined) {
+      const cleanLecturer = safeTrim(lecturerId);
+      if (cleanLecturer) {
+        const lecturer = await Admin.findById(cleanLecturer).lean();
+        if (!lecturer || lecturer.role !== 'lecturer') {
+          return res.status(400).json({ message: 'Selected lecturer does not exist or is not a valid lecturer account.' });
+        }
+        request.lecturer = lecturer._id;
+      }
+    }
+
+    if (feedbackWeek !== undefined) {
+      const cleanWeek = safeTrim(feedbackWeek);
+      if (cleanWeek) request.feedbackWeek = cleanWeek;
+    }
+
+    if (startDate !== undefined && startDate) request.startDate = new Date(startDate);
+    if (endDate !== undefined && endDate) request.endDate = new Date(endDate);
+    if (status !== undefined && ['Active', 'Closed', 'Draft'].includes(status)) {
+      request.status = status;
+    }
+    if (targetStudents !== undefined && ['all', 'specific'].includes(targetStudents)) {
+      request.targetStudents = targetStudents;
+    }
+    if (Array.isArray(selectedStudentIds)) {
+      request.selectedStudentIds = selectedStudentIds.map((sid) => new mongoose.Types.ObjectId(String(sid)));
+    }
+    if (isRecurring !== undefined) request.isRecurring = Boolean(isRecurring);
+    if (recurringDay !== undefined) request.recurringDay = Number(recurringDay) || 5;
+
+    await request.save();
+
+    const populated = await FeedbackRequest.findById(request._id)
+      .populate('lecturer', 'name email lecturerId subject batchId')
+      .lean();
+
+    return res.json({
+      request: populated,
+      message: 'Feedback request updated successfully.',
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function adminDeleteFeedbackRequest(req, res, next) {
+  try {
+    const id = safeTrim(req.params?.id);
+    if (!id) return res.status(400).json({ message: 'Feedback request ID is required' });
+
+    const request = await FeedbackRequest.findById(id);
+    if (!request) return res.status(404).json({ message: 'Feedback request not found' });
+
+    // Branch access check for staff admin
+    if (req.adminAuth?.role === 'staff' && req.adminAuth?.branchId) {
+      if (request.branchId !== req.adminAuth.branchId) {
+        return res.status(403).json({ message: 'Unauthorized for this branch' });
+      }
+    }
+
+    // Delete associated feedback submissions and non-sent summaries to keep data consistent
+    await Feedback.deleteMany({ feedbackRequest: request._id });
+    await FeedbackSummary.deleteMany({ feedbackRequest: request._id, status: { $ne: 'Sent' } });
+
+    await FeedbackRequest.findByIdAndDelete(request._id);
+
+    return res.json({
+      ok: true,
+      message: 'Feedback request and associated submissions deleted successfully.',
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 /* =========================================================
    3. FEEDBACK SUMMARY GENERATION, APPROVAL & DELIVERY
 ========================================================= */
@@ -727,17 +854,115 @@ export async function adminFlagFeedback(req, res, next) {
   }
 }
 
+export async function adminUpdateFeedback(req, res, next) {
+  try {
+    const id = safeTrim(req.params?.id);
+    if (!id) return res.status(400).json({ message: 'Feedback ID is required' });
+
+    const feedback = await Feedback.findById(id);
+    if (!feedback) return res.status(404).json({ message: 'Feedback not found' });
+
+    const {
+      rating,
+      ratings,
+      comment,
+      positiveFeedback,
+      improvementFeedback,
+      learningDifficulties,
+      concerns,
+      suggestions,
+      flagged,
+      status,
+    } = req.body || {};
+
+    if (rating !== undefined && Number(rating) >= 1 && Number(rating) <= 5) {
+      feedback.rating = Number(rating);
+    }
+
+    if (ratings && typeof ratings === 'object') {
+      const keys = ['teachingClarity', 'subjectKnowledge', 'communication', 'studentEngagement', 'overallExperience'];
+      for (const k of keys) {
+        if (ratings[k] !== undefined && Number(ratings[k]) >= 1 && Number(ratings[k]) <= 5) {
+          if (!feedback.ratings) feedback.ratings = {};
+          feedback.ratings[k] = Number(ratings[k]);
+        }
+      }
+    }
+
+    if (comment !== undefined) feedback.comment = String(comment).trim().slice(0, 2000);
+    if (positiveFeedback !== undefined) feedback.positiveFeedback = String(positiveFeedback).trim().slice(0, 1500);
+    if (improvementFeedback !== undefined) feedback.improvementFeedback = String(improvementFeedback).trim().slice(0, 1500);
+    if (learningDifficulties !== undefined) feedback.learningDifficulties = String(learningDifficulties).trim().slice(0, 1500);
+    if (concerns !== undefined) feedback.concerns = String(concerns).trim().slice(0, 1500);
+    if (suggestions !== undefined) feedback.suggestions = String(suggestions).trim().slice(0, 1500);
+
+    if (flagged !== undefined) {
+      feedback.flagged = Boolean(flagged);
+      if (feedback.flagged) {
+        feedback.flaggedAt = new Date();
+        feedback.flaggedBy = new mongoose.Types.ObjectId(String(req.adminAuth?.id));
+      }
+    }
+
+    if (status !== undefined && ['active', 'removed'].includes(status)) {
+      feedback.status = status;
+      if (status === 'removed') {
+        feedback.removedAt = new Date();
+        feedback.removedBy = new mongoose.Types.ObjectId(String(req.adminAuth?.id));
+        feedback.removedReason = safeTrim(req.body?.reason) || 'Removed by admin';
+      }
+    }
+
+    await feedback.save();
+
+    await FeedbackModerationEvent.create({
+      feedback: feedback._id,
+      action: 'EDIT',
+      reason: 'Admin modified feedback comments/ratings',
+      actor: new mongoose.Types.ObjectId(String(req.adminAuth?.id)),
+      at: new Date(),
+    });
+
+    const populated = await Feedback.findById(feedback._id)
+      .populate('student', 'fullName studentId branchId batchId course')
+      .populate('lecturer', 'name email lecturerId')
+      .populate('feedbackRequest', 'feedbackWeek moduleId batchId branchId')
+      .lean();
+
+    return res.json({
+      ok: true,
+      feedback: populated,
+      message: 'Feedback updated successfully.',
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function adminRemoveFeedback(req, res, next) {
   try {
     const id = safeTrim(req.params?.id);
     const reason = (req.body && typeof req.body === 'object' ? req.body.reason : undefined) ?? req.query?.reason;
+    const isPermanent = req.query?.permanent === 'true' || req.body?.permanent === true;
     if (!id) return res.status(400).json({ message: 'Feedback id is required' });
 
     const feedback = await Feedback.findById(id);
     if (!feedback) return res.status(404).json({ message: 'Feedback not found' });
-    if (feedback.status === 'removed') return res.json({ ok: true });
 
     const safeReason = safeTrim(reason);
+
+    if (isPermanent) {
+      await FeedbackModerationEvent.create({
+        feedback: feedback._id,
+        action: 'PERMANENT_DELETE',
+        reason: safeReason || 'Permanently deleted by admin',
+        actor: new mongoose.Types.ObjectId(String(req.adminAuth?.id)),
+        at: new Date(),
+      });
+      await Feedback.findByIdAndDelete(id);
+      return res.json({ ok: true, message: 'Feedback permanently deleted' });
+    }
+
     feedback.status = 'removed';
     feedback.removedAt = new Date();
     feedback.removedBy = new mongoose.Types.ObjectId(String(req.adminAuth?.id));
@@ -752,7 +977,7 @@ export async function adminRemoveFeedback(req, res, next) {
       at: new Date(),
     });
 
-    return res.json({ ok: true });
+    return res.json({ ok: true, message: 'Feedback removed successfully' });
   } catch (err) {
     next(err);
   }

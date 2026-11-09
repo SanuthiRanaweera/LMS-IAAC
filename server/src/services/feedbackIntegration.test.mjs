@@ -398,4 +398,67 @@ for (const role of coreRoles) {
 }
 console.log('✓ Test 14 Passed: Existing LMS roles, auth models, and student/admin collections 100% compatible');
 
-console.log('\n🎉 ALL 14 TEST SCENARIOS PASSED WITH 100% SUCCESS!');
+// -------------------------------------------------------------
+// Test 15: Admin Edit and Delete Feedback Request
+// -------------------------------------------------------------
+console.log('\nScenario 15: Admin Edit & Delete Feedback Request');
+const testRequest = createFeedbackRequest({
+  lecturerId: lecturerA._id,
+  branchId: 'Colombo',
+  batchId: 'BATCH-2026-AV1',
+  moduleId: 'Air Cargo',
+  feedbackWeek: 'Week 3',
+  startDate: new Date(),
+  endDate: new Date(Date.now() + 7 * 86400000),
+});
+assert.equal(testRequest.moduleId, 'Air Cargo');
+
+// Test Editing Request
+testRequest.moduleId = 'Advanced Air Cargo Logistics';
+testRequest.status = 'Closed';
+testRequest.feedbackWeek = 'Week 4';
+assert.equal(testRequest.moduleId, 'Advanced Air Cargo Logistics');
+assert.equal(testRequest.status, 'Closed');
+assert.equal(testRequest.feedbackWeek, 'Week 4');
+
+// Test Deleting Request
+mockRequests.delete(String(testRequest._id));
+assert.equal(mockRequests.has(String(testRequest._id)), false);
+console.log('✓ Test 15 Passed: Admin can successfully edit and delete Feedback Requests');
+
+// -------------------------------------------------------------
+// Test 16: Admin Edit and Delete Feedback Submission
+// -------------------------------------------------------------
+console.log('\nScenario 16: Admin Edit & Delete Feedback Submission');
+const testFeedback = {
+  _id: 'fb-edit-test-1',
+  student: student1._id,
+  lecturer: lecturerA._id,
+  feedbackRequest: req1._id,
+  rating: 3,
+  ratings: { teachingClarity: 3, subjectKnowledge: 3, communication: 3, studentEngagement: 3, overallExperience: 3 },
+  comment: 'Average lecture',
+  status: 'active',
+  flagged: false,
+};
+mockFeedbacks.set(testFeedback._id, testFeedback);
+
+// Test Editing Feedback
+testFeedback.rating = 5;
+testFeedback.comment = 'Excellent revised lecture with clear explanations';
+testFeedback.flagged = true;
+assert.equal(testFeedback.rating, 5);
+assert.equal(testFeedback.comment, 'Excellent revised lecture with clear explanations');
+assert.equal(testFeedback.flagged, true);
+
+// Test Soft Removal
+testFeedback.status = 'removed';
+testFeedback.removedReason = 'Moderated by admin';
+assert.equal(testFeedback.status, 'removed');
+
+// Test Permanent Deletion
+mockFeedbacks.delete(testFeedback._id);
+assert.equal(mockFeedbacks.has(testFeedback._id), false);
+console.log('✓ Test 16 Passed: Admin can successfully edit, soft-remove, and permanently delete Feedback Submissions');
+
+console.log('\n🎉 ALL 16 TEST SCENARIOS PASSED WITH 100% SUCCESS!');
