@@ -29,3 +29,56 @@ svg {
   display: block;
   max-width: 100%;
 }
+
+/* =========================================================
+   GLASSMORPHISM 2.0 DESIGN TOKENS & UTILITIES
+========================================================= */
+
+.glass-dashboard-bg {
+  background-color: #F8FAFC;
+  background-image:
+    radial-gradient(circle at 15% 15%, rgba(96, 165, 250, 0.18), transparent 35%),
+    radial-gradient(circle at 85% 20%, rgba(139, 92, 246, 0.10), transparent 40%),
+    radial-gradient(circle at 50% 80%, rgba(59, 130, 246, 0.08), transparent 45%),
+    linear-gradient(135deg, #F8FAFC, #EEF4FF);
+  background-attachment: fixed;
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 20px;
+  box-shadow:
+    0 8px 32px rgba(15, 23, 42, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.glass-card-interactive {
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 20px;
+  box-shadow:
+    0 8px 32px rgba(15, 23, 42, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-card-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 14px 40px rgba(15, 23, 42, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.95);
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+

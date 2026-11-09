@@ -89,7 +89,7 @@ export default function SidebarBrandHeader({
     return (
       <div
         className={`flex items-center justify-center border-b p-3 ${
-          dark ? 'border-white/10 bg-[#101010]' : 'border-slate-200 bg-white'
+          dark ? 'border-white/10 bg-[#101010]' : 'border-slate-200/70 bg-white/40'
         } ${className}`}
         title={`${branding.title} – ${resolvedName} (${branding.label})`}
       >
@@ -107,7 +107,7 @@ export default function SidebarBrandHeader({
   return (
     <div
       className={`border-b px-4 py-4 transition-colors ${
-        dark ? 'border-white/10 bg-[#101010]' : 'border-slate-200 bg-white'
+        dark ? 'border-white/10 bg-[#101010]' : 'border-slate-200/70 bg-white/40'
       } ${className}`}
     >
       <div className="flex items-center gap-3">

@@ -1,18 +1,20 @@
 import { useState } from 'react';
 import {
   BookOpen,
-  Calendar,
-  FileText,
+  CalendarDays,
+  Files,
   FileUp,
   LayoutDashboard,
   Users,
+  UsersRound,
   GraduationCap,
   Video,
   Library,
-  MessageSquare,
+  MessageSquareText,
   Menu,
   X,
   ClipboardCheck,
+  ClipboardList,
 } from 'lucide-react';
 
 import { NavLink, useLocation } from 'react-router-dom';
@@ -51,7 +53,7 @@ const NAV = [
   {
     label: 'Students',
     to: '/admin/students',
-    icon: GraduationCap,
+    icon: UsersRound,
   },
 
   {
@@ -64,19 +66,19 @@ const NAV = [
   {
     label: 'Class Schedule',
     to: '/admin/schedule',
-    icon: Calendar,
+    icon: CalendarDays,
   },
 
   {
     label: 'Study Materials',
     to: '/admin/materials/upload',
-    icon: FileText,
+    icon: Files,
   },
 
   {
     label: 'Assignments',
     to: '/admin/assignments',
-    icon: FileUp,
+    icon: ClipboardList,
   },
 
   /* =========================
@@ -106,7 +108,7 @@ const NAV = [
   {
     label: 'Feedback',
     to: '/admin/feedback',
-    icon: MessageSquare,
+    icon: MessageSquareText,
     superAdminOnly: true,
   },
 ];
@@ -266,7 +268,7 @@ export default function AdminSidebar({ admin, dark = false }) {
     <nav className="p-3">
       <LimitedRoleNotice />
 
-      <ul className="space-y-1">
+      <ul className="space-y-1.5">
         {nav.map((item) => {
           const Icon = item.icon;
 
@@ -281,24 +283,39 @@ export default function AdminSidebar({ admin, dark = false }) {
                 onClick={onNavigate}
                 className={({
                   isActive,
-                }) =>
-                  [
-                    'flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-colors',
-
-                    isLinkActive(
-                      item,
-                      isActive
-                    )
-                      ? dark ? 'bg-sky-400/15 text-sky-300' : 'bg-sky-50 text-sky-700'
-                      : dark ? 'text-white/55 hover:bg-white/5 hover:text-white' : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
-                  ].join(' ')
-                }
+                }) => {
+                  const isCurrent = isLinkActive(item, isActive);
+                  return [
+                    'group relative flex min-h-11 items-center gap-3 rounded-2xl px-3.5 py-2.5 text-sm font-semibold transition-all duration-200',
+                    isCurrent
+                      ? dark
+                        ? 'bg-sky-400/20 text-sky-300 font-bold shadow-xs'
+                        : 'bg-blue-100/70 text-[#003580] font-bold border border-blue-200/70 shadow-xs'
+                      : dark
+                        ? 'text-white/65 hover:bg-white/10 hover:text-white'
+                        : 'text-slate-600 hover:bg-white/90 hover:text-slate-950 hover:shadow-2xs',
+                  ].join(' ');
+                }}
               >
-                <Icon className="h-4 w-4 shrink-0" />
-
-                <span className="truncate">
-                  {item.label}
-                </span>
+                {({ isActive }) => {
+                  const isCurrent = isLinkActive(item, isActive);
+                  return (
+                    <>
+                      <Icon
+                        className={`h-4.5 w-4.5 shrink-0 transition-transform duration-200 group-hover:scale-105 ${
+                          isCurrent ? 'text-blue-700' : 'text-slate-500'
+                        }`}
+                      />
+                      <span className="truncate">{item.label}</span>
+                      {isCurrent && (
+                        <span
+                          className="ml-auto h-2 w-2 rounded-full bg-blue-600 shadow-xs animate-pulse"
+                          aria-hidden="true"
+                        />
+                      )}
+                    </>
+                  );
+                }}
               </NavLink>
             </li>
           );
@@ -332,10 +349,16 @@ export default function AdminSidebar({ admin, dark = false }) {
   return (
     <>
       {/* ===============================================
-          MOBILE TOP BAR
+          MOBILE TOP BAR (Glassmorphism)
       =============================================== */}
 
-      <div className={`sticky top-0 z-40 flex h-16 items-center justify-between border-b px-4 shadow-xs md:hidden ${dark ? 'border-white/10 bg-[#101010]' : 'border-slate-200 bg-white'}`}>
+      <div
+        className={`sticky top-0 z-40 flex h-16 items-center justify-between border-b px-4 shadow-xs md:hidden ${
+          dark
+            ? 'border-white/10 bg-[#101010]/85 backdrop-blur-xl'
+            : 'border-white/80 bg-white/80 backdrop-blur-xl'
+        }`}
+      >
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white p-1 border border-slate-100 shadow-2xs">
             <img
@@ -366,7 +389,9 @@ export default function AdminSidebar({ admin, dark = false }) {
           onClick={() =>
             setMobileOpen(true)
           }
-          className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-xs transition-colors ${dark ? 'border-white/10 bg-white/5 text-white hover:bg-white/10' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
+          className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-xs transition-colors ${
+            dark ? 'border-white/10 bg-white/5 text-white hover:bg-white/10' : 'border-slate-200/80 bg-white/80 text-slate-700 hover:bg-white'
+          }`}
           aria-label="Open navigation menu"
         >
           <Menu className="h-5 w-5" />
@@ -374,10 +399,16 @@ export default function AdminSidebar({ admin, dark = false }) {
       </div>
 
       {/* ===============================================
-          DESKTOP SIDEBAR
+          DESKTOP FLOATING GLASS SIDEBAR
       =============================================== */}
 
-      <aside className={`sticky top-0 hidden h-screen w-64 shrink-0 overflow-y-auto border-r md:block ${dark ? 'border-white/10 bg-[#101010]' : 'border-slate-200 bg-white'}`}>
+      <aside
+        className={`sticky top-4 hidden h-[calc(100vh-2rem)] w-68 shrink-0 overflow-y-auto md:my-4 md:ml-4 md:block rounded-3xl border shadow-xl shadow-slate-900/5 transition-all z-30 ${
+          dark
+            ? 'border-white/10 bg-[#101010]/80 backdrop-blur-2xl'
+            : 'border-white/85 bg-white/78 backdrop-blur-2xl'
+        }`}
+      >
         <SidebarContent />
       </aside>
 
@@ -390,7 +421,7 @@ export default function AdminSidebar({ admin, dark = false }) {
           {/* Overlay */}
           <button
             type="button"
-            className="absolute inset-0 bg-slate-950/40"
+            className="absolute inset-0 bg-slate-950/40 backdrop-blur-xs"
             aria-label="Close admin menu"
             onClick={
               closeMobileMenu
@@ -398,8 +429,14 @@ export default function AdminSidebar({ admin, dark = false }) {
           />
 
           {/* Drawer */}
-          <aside className={`absolute left-0 top-0 h-full w-72 max-w-[86vw] overflow-y-auto shadow-2xl ${dark ? 'bg-[#101010]' : 'bg-white'}`}>
-            <div className={`flex h-14 items-center justify-between border-b px-4 ${dark ? 'border-white/10' : 'border-slate-200'}`}>
+          <aside
+            className={`absolute left-0 top-0 h-full w-72 max-w-[86vw] overflow-y-auto shadow-2xl ${
+              dark
+                ? 'bg-[#101010]/95 backdrop-blur-2xl border-r border-white/10'
+                : 'bg-white/90 backdrop-blur-2xl border-r border-white/80'
+            }`}
+          >
+            <div className={`flex h-14 items-center justify-between border-b px-4 ${dark ? 'border-white/10' : 'border-slate-200/80'}`}>
               <span className={`text-sm font-extrabold tracking-tight ${dark ? 'text-white' : 'text-[#003580]'}`}>
                 {branding.title}
               </span>

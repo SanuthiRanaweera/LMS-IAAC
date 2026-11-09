@@ -78,7 +78,12 @@ export default function AdminLayout() {
   }
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#f5f7fa] text-slate-900">
+    <div className="glass-dashboard-bg min-h-screen overflow-x-hidden text-slate-900 relative selection:bg-blue-100 selection:text-blue-900">
+      {/* Ambient Lighting Orbs for Glassmorphism 2.0 Depth */}
+      <div className="fixed -top-28 -left-28 h-96 w-96 rounded-full bg-blue-500/12 blur-3xl pointer-events-none -z-10" />
+      <div className="fixed top-1/3 -right-28 h-96 w-96 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none -z-10" />
+      <div className="fixed -bottom-28 left-1/4 h-96 w-96 rounded-full bg-sky-400/12 blur-3xl pointer-events-none -z-10" />
+
       <div className="min-h-screen md:flex">
         <AdminSidebar
           admin={admin}
@@ -86,14 +91,14 @@ export default function AdminLayout() {
           dark={false}
         />
 
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 flex flex-col">
           <AdminTopbar
             admin={admin}
             onLogout={onLogout}
             dark={false}
           />
 
-          <main className="w-full max-w-full px-4 py-5 sm:px-5 md:px-6">
+          <main className="w-full max-w-full px-3 py-4 sm:px-5 sm:py-6 md:px-6">
             <div className="mx-auto w-full max-w-7xl">
               <Outlet context={{ admin }} />
             </div>
