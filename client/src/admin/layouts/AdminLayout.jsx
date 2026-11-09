@@ -20,6 +20,11 @@ export default function AdminLayout() {
         const data = await apiGet('/api/admin/auth/me');
 
         if (!cancelled) {
+          const role = data?.role || data?.admin?.role;
+          if (role === 'lecturer') {
+            navigate('/lecturer/dashboard', { replace: true });
+            return;
+          }
           setAdmin(data);
         }
       } catch {

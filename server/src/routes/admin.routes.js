@@ -30,6 +30,19 @@ import {
   listSubjects,
 } from '../controllers/academics.controller.js';
 
+import {
+  listAdminLecturers,
+  createLecturerByAdmin,
+  updateLecturerByAdmin,
+  approveLecturerRegistration,
+  rejectLecturerRegistration,
+  updateLecturerStatus,
+  resetLecturerPassword,
+  generateRegistrationInvitation,
+  listRegistrationInvitations,
+  revokeRegistrationInvitation,
+} from '../controllers/lecturers.controller.js';
+
 export const adminRouter = Router();
 
 /* =========================================================
@@ -69,6 +82,74 @@ adminRouter.delete(
   '/users/:id',
   requirePermission('DELETE_STAFF_ADMIN'),
   deleteStaffUser
+);
+
+/* =========================================================
+   LECTURER MANAGEMENT (SUPER ADMIN)
+========================================================= */
+
+adminRouter.get(
+  '/lecturers',
+  requireAdminRole('superadmin'),
+  listAdminLecturers
+);
+
+adminRouter.post(
+  '/lecturers',
+  requireAdminRole('superadmin'),
+  createLecturerByAdmin
+);
+
+adminRouter.put(
+  '/lecturers/:id',
+  requireAdminRole('superadmin'),
+  updateLecturerByAdmin
+);
+
+adminRouter.patch(
+  '/lecturers/:id/approve',
+  requireAdminRole('superadmin'),
+  approveLecturerRegistration
+);
+
+adminRouter.patch(
+  '/lecturers/:id/reject',
+  requireAdminRole('superadmin'),
+  rejectLecturerRegistration
+);
+
+adminRouter.patch(
+  '/lecturers/:id/status',
+  requireAdminRole('superadmin'),
+  updateLecturerStatus
+);
+
+adminRouter.post(
+  '/lecturers/:id/reset-password',
+  requireAdminRole('superadmin'),
+  resetLecturerPassword
+);
+
+/* =========================================================
+   LECTURER REGISTRATION INVITATIONS (SUPER ADMIN)
+========================================================= */
+
+adminRouter.post(
+  '/lecturer-invitations',
+  requireAdminRole('superadmin'),
+  generateRegistrationInvitation
+);
+
+adminRouter.get(
+  '/lecturer-invitations',
+  requireAdminRole('superadmin'),
+  listRegistrationInvitations
+);
+
+adminRouter.patch(
+  '/lecturer-invitations/:id/revoke',
+  requireAdminRole('superadmin'),
+  revokeRegistrationInvitation
 );
 
 /* =========================================================

@@ -36,6 +36,13 @@ const NAV = [
   },
 
   {
+    label: 'Lecturers',
+    to: '/admin/lecturers',
+    icon: GraduationCap,
+    superAdminOnly: true,
+  },
+
+  {
     label: 'Students',
     to: '/admin/students',
     icon: GraduationCap,

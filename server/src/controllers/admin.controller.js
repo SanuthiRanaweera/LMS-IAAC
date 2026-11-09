@@ -914,6 +914,9 @@ export async function createStaffUser(
         mustChangePassword:
           mustChangePassword ===
           true,
+
+        accountStatus: 'Active',
+        registrationMethod: 'super_admin',
       });
 
     await logAdminAction(

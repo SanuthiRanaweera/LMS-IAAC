@@ -16,7 +16,14 @@ export default function AdminLoginPage() {
     setError(null);
 
     apiPost('/api/admin/auth/login', { email, password })
-      .then(() => navigate('/admin', { replace: true }))
+      .then((data) => {
+        const role = data?.admin?.role || data?.role;
+        if (role === 'lecturer') {
+          navigate('/lecturer/dashboard', { replace: true });
+        } else {
+          navigate('/admin', { replace: true });
+        }
+      })
       .catch((err) => setError(err))
       .finally(() => setSubmitting(false));
   };

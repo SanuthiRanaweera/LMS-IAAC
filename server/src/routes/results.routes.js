@@ -32,21 +32,21 @@ export const resultsRouter = Router();
 // GET /api/results/reports/filters
 resultsRouter.get(
   '/reports/filters',
-  requireAdminRole(['superadmin', 'staff']),
+  requireAdminRole(['superadmin', 'staff', 'lecturer']),
   getReportFilters
 );
 
 // GET /api/results/reports/preview
 resultsRouter.get(
   '/reports/preview',
-  requireAdminRole(['superadmin', 'staff']),
+  requireAdminRole(['superadmin', 'staff', 'lecturer']),
   previewReportData
 );
 
 // POST /api/results/reports/data
 resultsRouter.post(
   '/reports/data',
-  requireAdminRole(['superadmin', 'staff']),
+  requireAdminRole(['superadmin', 'staff', 'lecturer']),
   generateReportData
 );
 
@@ -76,7 +76,7 @@ GET /api/results
 */
 resultsRouter.get(
   '/',
-  requireAdminRole(['superadmin', 'staff']),
+  requireAdminRole(['superadmin', 'staff', 'lecturer']),
   listResults
 );
 
@@ -138,7 +138,7 @@ Keep this route BEFORE /:id.
 */
 resultsRouter.get(
   '/student/:studentId',
-  requireAdminRole(['superadmin', 'staff']),
+  requireAdminRole(['superadmin', 'staff', 'lecturer']),
   getStudentPublishedResults
 );
 
@@ -177,7 +177,7 @@ GET /api/results/:id
 */
 resultsRouter.get(
   '/:id',
-  requireAdminRole(['superadmin', 'staff']),
+  requireAdminRole(['superadmin', 'staff', 'lecturer']),
   getResultById
 );
 

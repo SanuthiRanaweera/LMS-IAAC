@@ -70,7 +70,7 @@ export function requireAuth(
 ) {
   try {
     const token =
-      req.cookies?.[COOKIE_NAME];
+      req.cookies?.[COOKIE_NAME] || req.cookies?.['iaac_admin_token'];
 
     if (!token) {
       return res.status(401).json({
@@ -78,9 +78,15 @@ export function requireAuth(
       });
     }
 
-    const decoded =
-      verifyAuthToken(token);
+    let decoded;
+    try {
+      decoded = verifyAuthToken(token);
+    } catch {
+      const adminSecret = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET || 'dev_only_change_me';
+      decoded = jwt.verify(token, adminSecret);
+    }
 
+    decoded.id = decoded.id || decoded.sub;
     req.auth = decoded;
 
     return next();

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { RefreshCcw, X, Save, LoaderCircle } from 'lucide-react';
 import { apiPost } from '../../api/http.js';
 import { calculateGrade, calculateFinalExamResult } from '../../utils/gradeCalculator.js';
 
@@ -113,7 +114,7 @@ export default function RepeatMarksModal({
         <div className="flex items-center justify-between border-b border-amber-200 bg-gradient-to-r from-amber-600 to-amber-700 px-6 py-4 text-white">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/20 text-white font-bold">
-              ↻
+              <RefreshCcw className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
               <h3 className="text-base font-bold text-white tracking-wide">
@@ -127,9 +128,10 @@ export default function RepeatMarksModal({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close repeat marks modal"
             className="rounded-lg p-1.5 text-white/80 hover:bg-white/20 hover:text-white transition cursor-pointer"
           >
-            ✕
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
 
@@ -245,7 +247,17 @@ export default function RepeatMarksModal({
               disabled={loading || repeatMarks === ''}
               className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 px-5 py-2 text-xs font-bold text-white shadow-md transition hover:from-amber-700 hover:to-amber-800 disabled:opacity-50 cursor-pointer"
             >
-              {loading ? 'Saving Repeat Marks...' : 'Save Repeat Marks'}
+              {loading ? (
+                <>
+                  <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  <span>Saving Repeat Marks...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" aria-hidden="true" />
+                  <span>Save Repeat Marks</span>
+                </>
+              )}
             </button>
           </div>
         </form>

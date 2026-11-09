@@ -20,6 +20,8 @@ import AdminBranchBatchesPage from './admin/pages/AdminBranchBatchesPage.jsx';
 import AdminRecordingsPage from './admin/pages/AdminRecordingsPage.jsx';
 import AdminFeedbackDashboardPage from './admin/pages/AdminFeedbackDashboardPage.jsx';
 import AdminFeedbackModerationLogPage from './admin/pages/AdminFeedbackModerationLogPage.jsx';
+import AdminLecturersPage from './admin/pages/AdminLecturersPage.jsx';
+import LecturerRegistration from './pages/auth/LecturerRegistration.jsx';
 
 /* =========================================================
    ADMIN RESULTS
@@ -58,7 +60,7 @@ import RegisterPage from './pages/RegisterPage.jsx';
 import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
 import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
 
-import LecturerProfilePage from './pages/LecturerProfilePage.jsx';
+import StudentViewLecturerProfilePage from './pages/LecturerProfilePage.jsx';
 import MyFeedbackHistoryPage from './pages/MyFeedbackHistoryPage.jsx';
 
 /* =========================================================
@@ -77,6 +79,9 @@ import LecturerSchedulePage from './pages/lecturer/LecturerSchedulePage.jsx';
 import LecturerRecordingsPage from './pages/lecturer/LecturerRecordingsPage.jsx';
 import LecturerKnowledgeHubPage from './pages/lecturer/LecturerKnowledgeHubPage.jsx';
 import LecturerFeedbackReportsPage from './pages/lecturer/LecturerFeedbackReportsPage.jsx';
+import LecturerMaterialsPage from './pages/lecturer/LecturerMaterialsPage.jsx';
+import LecturerAssignmentsPage from './pages/lecturer/LecturerAssignmentsPage.jsx';
+import LecturerProfilePage from './pages/lecturer/LecturerProfilePage.jsx';
 
 export default function App() {
   return (
@@ -117,6 +122,17 @@ export default function App() {
             element={
               <RequireAdminRole allow="superadmin">
                 <AdminUsersPage />
+              </RequireAdminRole>
+            }
+          />
+
+          {/* ================= LECTURERS ================= */}
+
+          <Route
+            path="lecturers"
+            element={
+              <RequireAdminRole allow="superadmin">
+                <AdminLecturersPage />
               </RequireAdminRole>
             }
           />
@@ -312,6 +328,11 @@ export default function App() {
         ================================================= */}
 
         <Route
+          path="/lecturer/register"
+          element={<LecturerRegistration />}
+        />
+
+        <Route
           path="/lecturer/change-password"
           element={<LecturerChangePasswordPage />}
         />
@@ -336,8 +357,43 @@ export default function App() {
           />
 
           <Route
+            path="students"
+            element={
+              <Navigate
+                to="/lecturer/dashboard"
+                replace
+              />
+            }
+          />
+
+          <Route
             path="schedule"
             element={<LecturerSchedulePage />}
+          />
+
+          <Route
+            path="materials"
+            element={<LecturerMaterialsPage />}
+          />
+
+          <Route
+            path="assignments"
+            element={<LecturerAssignmentsPage />}
+          />
+
+          <Route
+            path="results"
+            element={
+              <Navigate
+                to="/lecturer/dashboard"
+                replace
+              />
+            }
+          />
+
+          <Route
+            path="profile"
+            element={<LecturerProfilePage />}
           />
 
           <Route
@@ -440,7 +496,7 @@ export default function App() {
 
           <Route
             path="lecturers/:lecturerId"
-            element={<LecturerProfilePage />}
+            element={<StudentViewLecturerProfilePage />}
           />
 
           <Route

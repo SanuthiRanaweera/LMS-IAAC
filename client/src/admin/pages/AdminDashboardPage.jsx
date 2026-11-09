@@ -64,6 +64,11 @@ export default function AdminDashboardPage() {
   const [expandedBranches, setExpandedBranches] = useState(() => new Set());
 
   useEffect(() => {
+    if (admin?.role === 'lecturer') {
+      window.location.replace('/lecturer/dashboard');
+      return;
+    }
+
     let cancelled = false;
     setError(null);
 
@@ -78,7 +83,7 @@ export default function AdminDashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [admin?.role]);
 
   function toggleBranch(branchId) {
     setExpandedBranches((current) => {

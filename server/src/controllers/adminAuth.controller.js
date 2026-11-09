@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { Admin } from '../models/Admin.js';
 import { clearAdminCookie, setAdminCookie, signAdminToken } from '../middleware/adminAuth.js';
+import { setAuthCookie, clearAuthCookie } from '../middleware/auth.js';
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -13,6 +14,11 @@ function toAdminMePayload(admin) {
     name: admin.name,
     email: admin.email,
     role,
+    branchId: admin.branchId || '',
+    intakeId: admin.intakeId || '',
+    batchId: admin.batchId || '',
+    subject: admin.subject || '',
+    accountStatus: admin.accountStatus || 'Active',
     canUpdateResults: admin.canUpdateResults === true,
   };
 }
@@ -33,8 +39,32 @@ export async function adminLogin(req, res, next) {
     if (!ok) return res.status(401).json({ message: 'Invalid credentials' });
 
     const role = admin?.role ? String(admin.role) : 'staff';
+
+    // Account status check for lecturers
+    if (role === 'lecturer') {
+      const status = admin.accountStatus || 'Active';
+      if (status === 'Pending Approval') {
+        return res.status(403).json({
+          message: 'Your lecturer account is pending administrator approval. Please contact the Super Admin.',
+        });
+      }
+      if (status === 'Disabled') {
+        return res.status(403).json({
+          message: 'Your lecturer account has been deactivated. Please contact the administrator.',
+        });
+      }
+      if (status === 'Rejected') {
+        return res.status(403).json({
+          message: 'Your lecturer registration was not approved. Please contact the Super Admin.',
+        });
+      }
+    }
+
     const token = signAdminToken({ sub: String(admin._id), role });
     setAdminCookie(res, token);
+    if (role === 'lecturer') {
+      setAuthCookie(res, token);
+    }
 
     return res.json({ admin: toAdminMePayload(admin) });
   } catch (err) {
@@ -45,6 +75,7 @@ export async function adminLogin(req, res, next) {
 export async function adminLogout(req, res, next) {
   try {
     clearAdminCookie(res);
+    clearAuthCookie(res);
     res.json({ ok: true });
   } catch (err) {
     next(err);

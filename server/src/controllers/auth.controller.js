@@ -11,6 +11,10 @@ import {
   setAuthCookie,
   signAuthToken,
 } from '../middleware/auth.js';
+import {
+  setAdminCookie,
+  clearAdminCookie,
+} from '../middleware/adminAuth.js';
 
 import { DEFAULT_LMS_DATA } from '../data/defaultLmsData.js';
 
@@ -1972,9 +1976,28 @@ function toLecturerPayload(
       lecturer.branchId ||
       '',
 
+    intakeId:
+      lecturer.intakeId ||
+      '',
+
+    batchId:
+      lecturer.batchId ||
+      '',
+
     subject:
       lecturer.subject ||
       '',
+
+    accountStatus:
+      lecturer.accountStatus ||
+      'Active',
+
+    registrationMethod:
+      lecturer.registrationMethod ||
+      'super_admin',
+
+    canUpdateResults:
+      lecturer.canUpdateResults === true,
 
     role:
       'lecturer',
@@ -2155,6 +2178,32 @@ export async function loginStudent(
           });
       }
 
+      /* =====================================================
+         CHECK LECTURER ACCOUNT STATUS
+      ===================================================== */
+      const status = lecturer.accountStatus || 'Active';
+
+      if (status === 'Pending Approval') {
+        return res.status(403).json({
+          message:
+            'Your lecturer account is pending administrator approval. Please contact the Super Admin.',
+        });
+      }
+
+      if (status === 'Disabled') {
+        return res.status(403).json({
+          message:
+            'Your lecturer account has been deactivated. Please contact the administrator.',
+        });
+      }
+
+      if (status === 'Rejected') {
+        return res.status(403).json({
+          message:
+            'Your lecturer registration was not approved. Please contact the Super Admin.',
+        });
+      }
+
       const token =
         signAuthToken({
           sub:
@@ -2167,6 +2216,10 @@ export async function loginStudent(
         });
 
       setAuthCookie(
+        res,
+        token
+      );
+      setAdminCookie(
         res,
         token
       );
@@ -2573,6 +2626,9 @@ export async function logoutStudent(
     clearAuthCookie(
       res
     );
+    clearAdminCookie(
+      res
+    );
 
     return res.json({
       ok: true,
@@ -2627,6 +2683,17 @@ export async function getAuthMe(
             message:
               'Unauthorized',
           });
+      }
+
+      const lecturerStatus = lecturer.accountStatus || 'Active';
+      if (lecturerStatus !== 'Active') {
+        clearAuthCookie(res);
+        return res.status(403).json({
+          message:
+            lecturerStatus === 'Pending Approval'
+              ? 'Your lecturer account is pending administrator approval.'
+              : 'Your lecturer account has been deactivated. Please contact the administrator.',
+        });
       }
 
       return res.json({
