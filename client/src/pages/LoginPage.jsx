@@ -112,7 +112,12 @@ export default function LoginPage() {
             </Link>
           </div>
 
-          <div className="mt-8 text-center text-sm text-slate-500">Contact admin if you need access.</div>
+          <div className="mt-8 text-center text-sm text-slate-500">
+            College Staff or Lecturer?{' '}
+            <Link to="/admin/login" className="font-bold text-[#003580] hover:underline">
+              Sign in to Management Portal
+            </Link>
+          </div>
         </div>
       </div>
     </div>
