@@ -61,6 +61,7 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
 import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
 
 import StudentViewLecturerProfilePage from './pages/LecturerProfilePage.jsx';
+import StudentFeedbackPage from './pages/StudentFeedbackPage.jsx';
 import MyFeedbackHistoryPage from './pages/MyFeedbackHistoryPage.jsx';
 
 /* =========================================================
@@ -491,7 +492,7 @@ export default function App() {
 
           <Route
             path="feedback"
-            element={<MyFeedbackHistoryPage />}
+            element={<StudentFeedbackPage />}
           />
 
           <Route

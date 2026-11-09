@@ -53,6 +53,32 @@ export async function generateLecturerId() {
 }
 
 /**
+ * Migrates existing lecturer accounts that lack a valid sequential Lecturer ID.
+ * Preserves all existing relationships, credentials, and academic assignments.
+ */
+export async function migrateExistingLecturers() {
+  const unassigned = await Admin.find({
+    role: 'lecturer',
+    $or: [
+      { lecturerId: { $exists: false } },
+      { lecturerId: null },
+      { lecturerId: '' },
+      { lecturerId: { $not: /^IAAC-LEC-\d{4,}$/i } },
+    ],
+  }).sort({ createdAt: 1 });
+
+  let migratedCount = 0;
+  for (const doc of unassigned) {
+    const newId = await generateLecturerId();
+    doc.lecturerId = newId;
+    await doc.save();
+    migratedCount++;
+  }
+
+  return { migratedCount, totalChecked: unassigned.length };
+}
+
+/**
  * Shared backend service to create lecturer accounts consistently
  * across Super Admin creation and self-registration link workflows.
  */

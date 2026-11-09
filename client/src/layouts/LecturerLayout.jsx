@@ -9,6 +9,7 @@ import {
   Video,
   Library,
   MessageSquare,
+  MessageSquareText,
   CircleUserRound,
   LogOut,
   CircleHelp,
@@ -32,7 +33,7 @@ const MAIN_NAV = [
 const SECONDARY_NAV = [
   { label: 'Lecture Recordings', icon: Video, to: '/lecturer/recordings' },
   { label: 'Knowledge Hub', icon: Library, to: '/lecturer/knowledge-hub' },
-  { label: 'Feedback Reports', icon: MessageSquare, to: '/lecturer/feedback-reports' },
+  { label: 'My Feedback', icon: MessageSquareText, to: '/lecturer/feedback-reports' },
 ];
 
 export default function LecturerLayout() {

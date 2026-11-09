@@ -11,6 +11,7 @@ import {
   Menu,
   X,
   ClipboardCheck,
+  MessageSquareText,
 } from 'lucide-react';
 
 import { NavLink } from 'react-router-dom';
@@ -64,7 +65,7 @@ const NAV_LINKS = [
 
   {
     label: 'My Feedback',
-    icon: Bell,
+    icon: MessageSquareText,
     to: '/feedback',
   },
 ];
