@@ -5,6 +5,7 @@ import {
   adminListFeedbackRequests,
   adminUpdateFeedbackRequestStatus,
   adminGetFeedbackStats,
+  adminGetAcademicOptions,
   adminGenerateFeedbackSummary,
   adminGetFeedbackSummary,
   adminUpdateFeedbackSummary,
@@ -26,6 +27,9 @@ adminFeedbackRouter.use(requireAdmin);
 
 // Dashboard KPI stats
 adminFeedbackRouter.get('/stats', adminGetFeedbackStats);
+
+// Academic hierarchy options (Branch, Intake, Batch, Module)
+adminFeedbackRouter.get('/academic-options', adminGetAcademicOptions);
 
 // Feedback Request endpoints
 adminFeedbackRouter.post('/requests', adminCreateFeedbackRequest);

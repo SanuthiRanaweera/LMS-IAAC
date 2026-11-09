@@ -7,6 +7,7 @@ import { FeedbackModerationEvent } from '../models/FeedbackModerationEvent.js';
 import { AppData } from '../models/AppData.js';
 import { Admin } from '../models/Admin.js';
 import { Student } from '../models/Student.js';
+import { DEFAULT_LMS_DATA } from '../data/defaultLmsData.js';
 import { computeWeekPeriodUTC } from '../utils/weekPeriod.js';
 import {
   generateOrUpdateFeedbackSummary,
@@ -61,6 +62,155 @@ export async function adminGetFeedbackStats(req, res, next) {
       responsesReceived,
       averageRating,
       pendingReviews,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/* =========================================================
+   1.1 ACADEMIC HIERARCHY OPTIONS (BRANCH, INTAKE, BATCH, MODULE)
+========================================================= */
+export async function adminGetAcademicOptions(req, res, next) {
+  try {
+    const branchId = safeTrim(req.query?.branchId);
+    const intakeId = safeTrim(req.query?.intakeId);
+
+    // 1. Load academic branches from AppData or default fallback
+    let branches = [];
+    try {
+      const doc = await AppData.findOne({ key: 'academics' }).lean();
+      if (doc?.payload?.branches && Array.isArray(doc.payload.branches)) {
+        branches = doc.payload.branches;
+      }
+    } catch {}
+
+    if (branches.length === 0 && DEFAULT_LMS_DATA?.academics?.branches) {
+      branches = DEFAULT_LMS_DATA.academics.branches;
+    }
+
+    // Also include any branch names from Student collection
+    const studentBranches = await Student.distinct('branchId');
+    for (const sb of studentBranches) {
+      if (sb && !branches.some((b) => (b.name || b.id || '').toLowerCase() === sb.toLowerCase())) {
+        branches.push({ id: sb, name: sb, intakes: [] });
+      }
+    }
+
+    // 2. Resolve selected branch if requested
+    let selectedBranch = null;
+    if (branchId) {
+      selectedBranch = branches.find(
+        (b) =>
+          (b.id && b.id.toLowerCase() === branchId.toLowerCase()) ||
+          (b.name && b.name.toLowerCase() === branchId.toLowerCase())
+      );
+    }
+
+    // 3. Intakes for branch
+    let intakes = [];
+    if (selectedBranch && Array.isArray(selectedBranch.intakes)) {
+      intakes = selectedBranch.intakes.map((i) => ({
+        id: i.id || i.name,
+        name: i.name || i.id,
+      }));
+    } else if (!branchId) {
+      // If no branch filter, collect all intakes across branches
+      for (const b of branches) {
+        if (Array.isArray(b.intakes)) {
+          for (const i of b.intakes) {
+            if (!intakes.some((it) => it.id === (i.id || i.name))) {
+              intakes.push({ id: i.id || i.name, name: i.name || i.id });
+            }
+          }
+        }
+      }
+    }
+
+    // Also include distinct intakes from Student collection
+    const studentIntakeQuery = branchId ? { branchId: { $regex: new RegExp(`^${branchId}$`, 'i') } } : {};
+    const dbIntakes = await Student.distinct('intakeId', studentIntakeQuery);
+    for (const dbi of dbIntakes) {
+      if (dbi && !intakes.some((it) => it.id.toLowerCase() === dbi.toLowerCase() || it.name.toLowerCase() === dbi.toLowerCase())) {
+        intakes.push({ id: dbi, name: dbi });
+      }
+    }
+
+    // 4. Batches
+    let batches = [];
+    if (selectedBranch) {
+      if (intakeId) {
+        const foundIntake = selectedBranch.intakes?.find(
+          (i) =>
+            (i.id && i.id.toLowerCase() === intakeId.toLowerCase()) ||
+            (i.name && i.name.toLowerCase() === intakeId.toLowerCase())
+        );
+        if (foundIntake && Array.isArray(foundIntake.batches)) {
+          batches = foundIntake.batches.map((b) => ({
+            id: b.id || b.name,
+            name: b.name || b.id,
+          }));
+        }
+      } else {
+        // Collect batches across all intakes of this branch
+        if (Array.isArray(selectedBranch.intakes)) {
+          for (const i of selectedBranch.intakes) {
+            if (Array.isArray(i.batches)) {
+              for (const b of i.batches) {
+                if (!batches.some((bt) => bt.id === (b.id || b.name))) {
+                  batches.push({ id: b.id || b.name, name: b.name || b.id });
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Also include distinct batches from Student collection matching the branch / intake
+    const studentBatchQuery = {};
+    if (branchId) studentBatchQuery.branchId = { $regex: new RegExp(`^${branchId}$`, 'i') };
+    if (intakeId) studentBatchQuery.intakeId = { $regex: new RegExp(`^${intakeId}$`, 'i') };
+    const dbBatches = await Student.distinct('batchId', studentBatchQuery);
+    for (const dbb of dbBatches) {
+      if (dbb && !batches.some((b) => b.id.toLowerCase() === dbb.toLowerCase() || b.name.toLowerCase() === dbb.toLowerCase())) {
+        batches.push({ id: dbb, name: dbb });
+      }
+    }
+
+    // If still no batches (e.g. no branch selected yet), return all student batches
+    if (batches.length === 0) {
+      const allStudentBatches = await Student.distinct('batchId');
+      for (const b of allStudentBatches) {
+        if (b && !batches.some((bt) => bt.id.toLowerCase() === b.toLowerCase())) {
+          batches.push({ id: b, name: b });
+        }
+      }
+    }
+
+    // 5. Available modules / subjects
+    const lecturerSubjects = await Admin.distinct('subject', { role: 'lecturer', subject: { $ne: '' } });
+    const studentCourses = await Student.distinct('course');
+    const defaultModules = [
+      'Aviation Safety Management',
+      'Airport Operations',
+      'Flight Operations & Dispatch',
+      'Cabin Crew Professional Training',
+      'Ticketing & Reservations',
+      'Air Cargo & Logistics',
+      'Aviation Security & Dangerous Goods',
+      'Customer Service & Passenger Handling',
+    ];
+    const modules = Array.from(new Set([...defaultModules, ...lecturerSubjects, ...studentCourses])).filter(Boolean);
+
+    return res.json({
+      branches: branches.map((b) => ({
+        id: b.id || b.name,
+        name: b.name || b.id,
+      })),
+      intakes,
+      batches,
+      modules,
     });
   } catch (err) {
     next(err);
