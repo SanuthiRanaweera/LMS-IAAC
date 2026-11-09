@@ -73,124 +73,148 @@ export async function adminGetFeedbackStats(req, res, next) {
 ========================================================= */
 export async function adminGetAcademicOptions(req, res, next) {
   try {
-    const branchId = safeTrim(req.query?.branchId);
-    const intakeId = safeTrim(req.query?.intakeId);
-
     // 1. Load academic branches from AppData or default fallback
-    let branches = [];
+    let rawBranches = [];
     try {
       const doc = await AppData.findOne({ key: 'academics' }).lean();
       if (doc?.payload?.branches && Array.isArray(doc.payload.branches)) {
-        branches = doc.payload.branches;
+        rawBranches = doc.payload.branches;
       }
     } catch {}
 
-    if (branches.length === 0 && DEFAULT_LMS_DATA?.academics?.branches) {
-      branches = DEFAULT_LMS_DATA.academics.branches;
+    if (rawBranches.length === 0 && DEFAULT_LMS_DATA?.academics?.branches) {
+      rawBranches = DEFAULT_LMS_DATA.academics.branches;
     }
 
-    // Also include any branch names from Student collection
-    const studentBranches = await Student.distinct('branchId');
-    for (const sb of studentBranches) {
-      if (sb && !branches.some((b) => (b.name || b.id || '').toLowerCase() === sb.toLowerCase())) {
-        branches.push({ id: sb, name: sb, intakes: [] });
-      }
-    }
+    // Standard IAAC Diplomas
+    const diplomas = [
+      'Cabin Crew',
+      'Ground Operations',
+      'Ticketing & Reservations',
+      'Air Cargo',
+    ];
 
-    // 2. Resolve selected branch if requested
-    let selectedBranch = null;
-    if (branchId) {
-      selectedBranch = branches.find(
-        (b) =>
-          (b.id && b.id.toLowerCase() === branchId.toLowerCase()) ||
-          (b.name && b.name.toLowerCase() === branchId.toLowerCase())
-      );
-    }
+    const norm = (s) => String(s || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
+    const normalizeBranchKey = (str) =>
+      String(str || '')
+        .trim()
+        .toLowerCase()
+        .replace(/^branch[-_]/, '')
+        .replace(/[-_\s]+/g, '')
+        .replace(/academy$/, '')
+        .replace(/campus$/, '');
 
-    // 3. Intakes for branch
-    let intakes = [];
-    if (selectedBranch && Array.isArray(selectedBranch.intakes)) {
-      intakes = selectedBranch.intakes.map((i) => ({
-        id: i.id || i.name,
-        name: i.name || i.id,
-      }));
-    } else if (!branchId) {
-      // If no branch filter, collect all intakes across branches
-      for (const b of branches) {
-        if (Array.isArray(b.intakes)) {
-          for (const i of b.intakes) {
-            if (!intakes.some((it) => it.id === (i.id || i.name))) {
-              intakes.push({ id: i.id || i.name, name: i.name || i.id });
-            }
-          }
-        }
-      }
-    }
+    // Deduplicate branches strictly by normalized name or ID
+    const branchMap = new Map();
+    for (const b of rawBranches) {
+      if (!b?.id && !b?.name) continue;
+      const key = normalizeBranchKey(b.name || b.id);
+      const bName = String(b.name || b.id);
+      const bId = String(b.id || b.name);
+      const isReadable = !bName.startsWith('branch-') && !bName.startsWith('branch_');
 
-    // Also include distinct intakes from Student collection
-    const studentIntakeQuery = branchId ? { branchId: { $regex: new RegExp(`^${branchId}$`, 'i') } } : {};
-    const dbIntakes = await Student.distinct('intakeId', studentIntakeQuery);
-    for (const dbi of dbIntakes) {
-      if (dbi && !intakes.some((it) => it.id.toLowerCase() === dbi.toLowerCase() || it.name.toLowerCase() === dbi.toLowerCase())) {
-        intakes.push({ id: dbi, name: dbi });
-      }
-    }
-
-    // 4. Batches
-    let batches = [];
-    if (selectedBranch) {
-      if (intakeId) {
-        const foundIntake = selectedBranch.intakes?.find(
-          (i) =>
-            (i.id && i.id.toLowerCase() === intakeId.toLowerCase()) ||
-            (i.name && i.name.toLowerCase() === intakeId.toLowerCase())
-        );
-        if (foundIntake && Array.isArray(foundIntake.batches)) {
-          batches = foundIntake.batches.map((b) => ({
-            id: b.id || b.name,
-            name: b.name || b.id,
-          }));
-        }
+      if (!branchMap.has(key)) {
+        branchMap.set(key, {
+          id: bId,
+          name: isReadable ? bName : (b.name || bId),
+          intakes: Array.isArray(b.intakes) ? [...b.intakes] : [],
+        });
       } else {
-        // Collect batches across all intakes of this branch
-        if (Array.isArray(selectedBranch.intakes)) {
-          for (const i of selectedBranch.intakes) {
-            if (Array.isArray(i.batches)) {
-              for (const b of i.batches) {
-                if (!batches.some((bt) => bt.id === (b.id || b.name))) {
-                  batches.push({ id: b.id || b.name, name: b.name || b.id });
-                }
-              }
-            }
+        const existing = branchMap.get(key);
+        if (isReadable && (existing.name.startsWith('branch-') || existing.name.length < bName.length)) {
+          existing.name = bName;
+        }
+        if (Array.isArray(b.intakes) && b.intakes.length > 0) {
+          for (const newIntake of b.intakes) {
+            const hasIntake = (existing.intakes || []).some(
+              (i) => norm(i?.id || i?.name) === norm(newIntake?.id || newIntake?.name)
+            );
+            if (!hasIntake) existing.intakes.push(newIntake);
           }
         }
       }
     }
 
-    // Also include distinct batches from Student collection matching the branch / intake
-    const studentBatchQuery = {};
-    if (branchId) studentBatchQuery.branchId = { $regex: new RegExp(`^${branchId}$`, 'i') };
-    if (intakeId) studentBatchQuery.intakeId = { $regex: new RegExp(`^${intakeId}$`, 'i') };
-    const dbBatches = await Student.distinct('batchId', studentBatchQuery);
-    for (const dbb of dbBatches) {
-      if (dbb && !batches.some((b) => b.id.toLowerCase() === dbb.toLowerCase() || b.name.toLowerCase() === dbb.toLowerCase())) {
-        batches.push({ id: dbb, name: dbb });
-      }
-    }
+    // Build structured clean branches
+    const cleanBranches = Array.from(branchMap.values()).map((b) => {
+      const intakeList = (b.intakes || []).map((i) => {
+        const batchList = (Array.isArray(i.batches) ? i.batches : [])
+          .filter(Boolean)
+          .map((bt) => ({
+            id: String(bt.id || bt.name),
+            name: String(bt.name || bt.id),
+          }));
+        return {
+          id: String(i.id || i.name),
+          name: String(i.name || i.id),
+          batches: batchList,
+        };
+      });
 
-    // If still no batches (e.g. no branch selected yet), return all student batches
-    if (batches.length === 0) {
-      const allStudentBatches = await Student.distinct('batchId');
-      for (const b of allStudentBatches) {
-        if (b && !batches.some((bt) => bt.id.toLowerCase() === b.toLowerCase())) {
-          batches.push({ id: b, name: b });
+      return {
+        id: b.id,
+        name: b.name,
+        intakes: intakeList,
+      };
+    });
+
+    // Enrich with batches and intakes from Student collection
+    try {
+      const students = await Student.find({})
+        .select('branchId intakeId batchId course')
+        .lean();
+
+      for (const st of students) {
+        if (!st.branchId) continue;
+        const targetBranch = cleanBranches.find(
+          (b) =>
+            normalizeBranchKey(b.id) === normalizeBranchKey(st.branchId) ||
+            normalizeBranchKey(b.name) === normalizeBranchKey(st.branchId)
+        );
+
+        if (targetBranch) {
+          const intakeName = st.intakeId || 'General Intake';
+          let targetIntake = targetBranch.intakes.find(
+            (i) => norm(i.id) === norm(intakeName) || norm(i.name) === norm(intakeName)
+          );
+          if (!targetIntake) {
+            targetIntake = {
+              id: st.intakeId || intakeName,
+              name: intakeName,
+              batches: [],
+            };
+            targetBranch.intakes.push(targetIntake);
+          }
+
+          if (st.batchId) {
+            const hasBatch = targetIntake.batches.some(
+              (bt) => norm(bt.id) === norm(st.batchId) || norm(bt.name) === norm(st.batchId)
+            );
+            if (!hasBatch) {
+              targetIntake.batches.push({
+                id: st.batchId,
+                name: st.batchId,
+              });
+            }
+          }
+        }
+      }
+    } catch {}
+
+    // Collect all batches for global filter toolbar
+    const allBatchesSet = new Map();
+    for (const b of cleanBranches) {
+      for (const i of b.intakes) {
+        for (const bt of i.batches) {
+          if (!allBatchesSet.has(bt.id)) {
+            allBatchesSet.set(bt.id, { id: bt.id, name: bt.name });
+          }
         }
       }
     }
 
-    // 5. Available modules / subjects
+    // Available modules
     const lecturerSubjects = await Admin.distinct('subject', { role: 'lecturer', subject: { $ne: '' } });
-    const studentCourses = await Student.distinct('course');
     const defaultModules = [
       'Aviation Safety Management',
       'Airport Operations',
@@ -201,15 +225,38 @@ export async function adminGetAcademicOptions(req, res, next) {
       'Aviation Security & Dangerous Goods',
       'Customer Service & Passenger Handling',
     ];
-    const modules = Array.from(new Set([...defaultModules, ...lecturerSubjects, ...studentCourses])).filter(Boolean);
+    const modules = Array.from(new Set([...defaultModules, ...lecturerSubjects])).filter(Boolean);
+
+    // Contextual query filters if requested
+    let selectedIntakes = [];
+    let selectedBatches = [];
+    if (req.query?.branchId) {
+      const qBranch = cleanBranches.find(
+        (b) =>
+          normalizeBranchKey(b.id) === normalizeBranchKey(req.query.branchId) ||
+          normalizeBranchKey(b.name) === normalizeBranchKey(req.query.branchId)
+      );
+      if (qBranch) {
+        selectedIntakes = qBranch.intakes;
+        if (req.query?.intakeId) {
+          const qIntake = qBranch.intakes.find(
+            (i) => norm(i.id) === norm(req.query.intakeId) || norm(i.name) === norm(req.query.intakeId)
+          );
+          if (qIntake) {
+            selectedBatches = qIntake.batches;
+          }
+        } else {
+          selectedBatches = qBranch.intakes.flatMap((i) => i.batches || []);
+        }
+      }
+    }
 
     return res.json({
-      branches: branches.map((b) => ({
-        id: b.id || b.name,
-        name: b.name || b.id,
-      })),
-      intakes,
-      batches,
+      branches: cleanBranches,
+      intakes: selectedIntakes,
+      batches: selectedBatches,
+      diplomas,
+      allBatches: Array.from(allBatchesSet.values()),
       modules,
     });
   } catch (err) {

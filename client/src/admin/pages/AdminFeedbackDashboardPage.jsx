@@ -63,6 +63,12 @@ export default function AdminFeedbackDashboardPage() {
   // Dynamic Options for Modal & Filters (Fetched from backend)
   const [intakesList, setIntakesList] = useState([]);
   const [batchesList, setBatchesList] = useState([]);
+  const [diplomasList, setDiplomasList] = useState([
+    'Cabin Crew',
+    'Ground Operations',
+    'Ticketing & Reservations',
+    'Air Cargo',
+  ]);
   const [modulesList, setModulesList] = useState([]);
   const [allBatches, setAllBatches] = useState([]);
   const [customBatchMode, setCustomBatchMode] = useState(false);
@@ -117,6 +123,7 @@ export default function AdminFeedbackDashboardPage() {
     apiGet('/api/admin/feedback/academic-options')
       .then((data) => {
         if (Array.isArray(data?.branches)) setBranches(data.branches);
+        if (Array.isArray(data?.diplomas) && data.diplomas.length > 0) setDiplomasList(data.diplomas);
         if (Array.isArray(data?.batches)) setAllBatches(data.batches);
         if (Array.isArray(data?.modules)) setModulesList(data.modules);
       })
@@ -133,6 +140,74 @@ export default function AdminFeedbackDashboardPage() {
     loadStats();
   }, []);
 
+  // Cascading Hierarchy: Branch -> Intake -> Batch
+  const selectedBranchObj = useMemo(() => {
+    if (!requestForm.branchId) return null;
+    return (
+      branches.find(
+        (b) =>
+          String(b.id || '') === String(requestForm.branchId) ||
+          String(b.name || '') === String(requestForm.branchId)
+      ) || null
+    );
+  }, [branches, requestForm.branchId]);
+
+  const availableIntakes = useMemo(() => {
+    if (intakesList.length > 0) return intakesList;
+    if (!selectedBranchObj) return [];
+    return Array.isArray(selectedBranchObj.intakes) ? selectedBranchObj.intakes : [];
+  }, [intakesList, selectedBranchObj]);
+
+  const selectedIntakeObj = useMemo(() => {
+    if (!requestForm.intakeId || !availableIntakes.length) return null;
+    return (
+      availableIntakes.find(
+        (i) =>
+          String(i.id || '') === String(requestForm.intakeId) ||
+          String(i.name || '') === String(requestForm.intakeId)
+      ) || null
+    );
+  }, [availableIntakes, requestForm.intakeId]);
+
+  const availableBatches = useMemo(() => {
+    if (batchesList.length > 0) return batchesList;
+    if (!selectedIntakeObj) return [];
+    return Array.isArray(selectedIntakeObj.batches) ? selectedIntakeObj.batches : [];
+  }, [batchesList, selectedIntakeObj]);
+
+  const handleBranchChange = (e) => {
+    const val = e.target.value;
+    setRequestForm((prev) => ({
+      ...prev,
+      branchId: val,
+      intakeId: '',
+      batchId: '',
+    }));
+    setIntakesList([]);
+    setBatchesList([]);
+  };
+
+  const handleIntakeChange = (e) => {
+    const val = e.target.value;
+    const chosen = availableIntakes.find(
+      (i) => String(i.id || '') === String(val) || String(i.name || '') === String(val)
+    );
+    const subBatches = Array.isArray(chosen?.batches) ? chosen.batches : [];
+    const firstBatch = subBatches[0]?.id || chosen?.id || val;
+    setRequestForm((prev) => ({
+      ...prev,
+      intakeId: val,
+      batchId: firstBatch,
+    }));
+  };
+
+  const handleDiplomaChange = (e) => {
+    setRequestForm((prev) => ({
+      ...prev,
+      diplomaId: e.target.value,
+    }));
+  };
+
   // Fetch Intakes and Batches when Branch changes in Create Modal
   useEffect(() => {
     if (!requestForm.branchId) {
@@ -143,28 +218,30 @@ export default function AdminFeedbackDashboardPage() {
 
     apiGet(`/api/admin/feedback/academic-options?branchId=${encodeURIComponent(requestForm.branchId)}`)
       .then((data) => {
-        setIntakesList(Array.isArray(data?.intakes) ? data.intakes : []);
-        setBatchesList(Array.isArray(data?.batches) ? data.batches : []);
+        if (Array.isArray(data?.intakes) && data.intakes.length > 0) {
+          setIntakesList(data.intakes);
+        }
+        if (Array.isArray(data?.batches) && data.batches.length > 0) {
+          setBatchesList(data.batches);
+        }
         if (Array.isArray(data?.modules) && data.modules.length > 0) {
           setModulesList(data.modules);
         }
       })
-      .catch(() => {
-        const foundBranch = branches.find((b) => b.id === requestForm.branchId || b.name === requestForm.branchId);
-        if (foundBranch && Array.isArray(foundBranch.intakes)) {
-          setIntakesList(foundBranch.intakes.map((i) => ({ id: i.id || i.name, name: i.name || i.id })));
-        }
-      });
-  }, [requestForm.branchId, branches]);
+      .catch(() => {});
+  }, [requestForm.branchId]);
 
   // Fetch Batches when Intake changes in Create Modal
   useEffect(() => {
-    if (!requestForm.branchId) return;
+    if (!requestForm.branchId || !requestForm.intakeId) return;
 
-    const intakeParam = requestForm.intakeId ? `&intakeId=${encodeURIComponent(requestForm.intakeId)}` : '';
-    apiGet(`/api/admin/feedback/academic-options?branchId=${encodeURIComponent(requestForm.branchId)}${intakeParam}`)
+    apiGet(
+      `/api/admin/feedback/academic-options?branchId=${encodeURIComponent(
+        requestForm.branchId
+      )}&intakeId=${encodeURIComponent(requestForm.intakeId)}`
+    )
       .then((data) => {
-        if (Array.isArray(data?.batches)) {
+        if (Array.isArray(data?.batches) && data.batches.length > 0) {
           setBatchesList(data.batches);
         }
       })
@@ -249,7 +326,18 @@ export default function AdminFeedbackDashboardPage() {
     setCreateLoading(true);
     setCreateError('');
     try {
-      await apiPost('/api/admin/feedback/requests', requestForm);
+      const payload = {
+        ...requestForm,
+        batchId: requestForm.batchId || requestForm.intakeId,
+      };
+      if (!payload.branchId) throw new Error('Please select a Branch Campus.');
+      if (!payload.intakeId) throw new Error('Please select an Academic Intake.');
+      if (!payload.batchId) throw new Error('Please select a Student Batch.');
+      if (!payload.diplomaId) throw new Error('Please select a Diploma.');
+      if (!payload.moduleId) throw new Error('Please enter a Module / Subject.');
+      if (!payload.lecturerId) throw new Error('Please select an Assigned Lecturer.');
+
+      await apiPost('/api/admin/feedback/requests', payload);
       setSuccessMessage('Feedback request successfully created and scheduled.');
       setCreateModalOpen(false);
       loadRequests();
@@ -865,61 +953,48 @@ export default function AdminFeedbackDashboardPage() {
                 </div>
               )}
 
-              {/* Branch Selection */}
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Branch Campus <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  required
-                  value={requestForm.branchId}
-                  onChange={(e) =>
-                    setRequestForm({
-                      ...requestForm,
-                      branchId: e.target.value,
-                      intakeId: '',
-                      batchId: '',
-                    })
-                  }
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none focus:border-blue-500"
-                >
-                  <option value="">Select Branch</option>
-                  {branches.map((b) => (
-                    <option key={b.id || b.name} value={b.name || b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Intake & Batch Selection (Fetched dynamically by backend) */}
-              <div className="grid grid-cols-2 gap-3">
-                {/* Academic Intake Dropdown */}
+              {/* Row 1: Academic Hierarchy (Branch -> Intake -> Diploma) Matching Image 2 */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {/* 1. Branch Campus */}
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    Academic Intake <span className="text-rose-500">*</span>
+                    Branch <span className="text-rose-500">*</span>
                   </label>
                   <select
                     required
-                    value={requestForm.intakeId}
-                    onChange={(e) =>
-                      setRequestForm({
-                        ...requestForm,
-                        intakeId: e.target.value,
-                        batchId: '',
-                      })
-                    }
+                    value={requestForm.branchId}
+                    onChange={handleBranchChange}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#003580] focus:ring-1 focus:ring-[#003580]"
+                  >
+                    <option value="">Select Branch</option>
+                    {branches.map((b) => (
+                      <option key={b.id || b.name} value={b.id || b.name}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 2. Academic Intake (shows only this branch's intakes) */}
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Intake <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    required
                     disabled={!requestForm.branchId}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                    value={requestForm.intakeId}
+                    onChange={handleIntakeChange}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#003580] focus:ring-1 focus:ring-[#003580] disabled:bg-slate-100 disabled:cursor-not-allowed"
                   >
                     <option value="">
                       {!requestForm.branchId
                         ? 'Select Branch First'
-                        : intakesList.length === 0
+                        : availableIntakes.length === 0
                         ? 'No Intakes Found'
-                        : 'Select Academic Intake'}
+                        : 'Select Intake'}
                     </option>
-                    {intakesList.map((i) => (
+                    {availableIntakes.map((i) => (
                       <option key={i.id || i.name} value={i.id || i.name}>
                         {i.name}
                       </option>
@@ -927,11 +1002,33 @@ export default function AdminFeedbackDashboardPage() {
                   </select>
                 </div>
 
-                {/* Student Batch Dropdown */}
+                {/* 3. Diploma Selection */}
                 <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Diploma <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={requestForm.diplomaId}
+                    onChange={handleDiplomaChange}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#003580] focus:ring-1 focus:ring-[#003580]"
+                  >
+                    <option value="">Select Diploma</option>
+                    {diplomasList.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Optional Batch Sub-group or Custom Batch */}
+              {(availableBatches.length > 0 || customBatchMode) ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block font-bold text-slate-700">
-                      Student Batch <span className="text-rose-500">*</span>
+                    <label className="block font-bold text-slate-700 text-[11px]">
+                      Student Batch (Sub-group)
                     </label>
                     <button
                       type="button"
@@ -945,28 +1042,21 @@ export default function AdminFeedbackDashboardPage() {
                   {customBatchMode ? (
                     <input
                       type="text"
-                      required
                       placeholder="e.g. BATCH-2026-AV1"
                       value={requestForm.batchId}
                       onChange={(e) => setRequestForm({ ...requestForm, batchId: e.target.value })}
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none focus:border-blue-500"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-[#003580]"
                     />
                   ) : (
                     <select
-                      required
                       value={requestForm.batchId}
                       onChange={(e) => setRequestForm({ ...requestForm, batchId: e.target.value })}
-                      disabled={!requestForm.branchId}
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-[#003580]"
                     >
-                      <option value="">
-                        {!requestForm.branchId
-                          ? 'Select Branch First'
-                          : batchesList.length === 0
-                          ? 'No Batches Found'
-                          : 'Select Student Batch'}
+                      <option value={requestForm.intakeId}>
+                        All Students in {selectedIntakeObj?.name || 'Intake'}
                       </option>
-                      {batchesList.map((b) => (
+                      {availableBatches.map((b) => (
                         <option key={b.id || b.name} value={b.id || b.name}>
                           {b.name}
                         </option>
@@ -974,49 +1064,62 @@ export default function AdminFeedbackDashboardPage() {
                     </select>
                   )}
                 </div>
-              </div>
-
-              {/* Module / Subject */}
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Module / Subject <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    required
-                    list="modules-datalist"
-                    placeholder="Select or enter module / subject (e.g. Aviation Safety Management)"
-                    value={requestForm.moduleId}
-                    onChange={(e) => setRequestForm({ ...requestForm, moduleId: e.target.value })}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none focus:border-blue-500"
-                  />
-                  <datalist id="modules-datalist">
-                    {modulesList.map((m) => (
-                      <option key={m} value={m} />
-                    ))}
-                  </datalist>
+              ) : (
+                <div className="flex justify-end -mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setCustomBatchMode(true)}
+                    className="text-[10px] font-semibold text-[#003580] hover:underline cursor-pointer"
+                  >
+                    + Custom Batch Code
+                  </button>
                 </div>
-              </div>
+              )}
 
-              {/* Lecturer Selection (Shows ID + Name + Subject) */}
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Assigned Lecturer <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  required
-                  value={requestForm.lecturerId}
-                  onChange={(e) => setRequestForm({ ...requestForm, lecturerId: e.target.value })}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none focus:border-blue-500"
-                >
-                  <option value="">Select Lecturer</option>
-                  {lecturersList.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.lecturerId ? `${l.lecturerId} – ` : ''}{l.name} {l.subject ? `(${l.subject})` : ''}
-                    </option>
-                  ))}
-                </select>
+              {/* Row 2: Module & Lecturer (2-Column Grid) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* Module / Subject */}
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Module / Subject <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      list="modules-datalist"
+                      placeholder="Select or enter module / subject (e.g. Aviation Safety Management)"
+                      value={requestForm.moduleId}
+                      onChange={(e) => setRequestForm({ ...requestForm, moduleId: e.target.value })}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#003580] focus:ring-1 focus:ring-[#003580]"
+                    />
+                    <datalist id="modules-datalist">
+                      {modulesList.map((m) => (
+                        <option key={m} value={m} />
+                      ))}
+                    </datalist>
+                  </div>
+                </div>
+
+                {/* Lecturer Selection (Shows ID + Name + Subject) */}
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Assigned Lecturer <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={requestForm.lecturerId}
+                    onChange={(e) => setRequestForm({ ...requestForm, lecturerId: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#003580] focus:ring-1 focus:ring-[#003580]"
+                  >
+                    <option value="">Select Lecturer</option>
+                    {lecturersList.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.lecturerId ? `${l.lecturerId} – ` : ''}{l.name} {l.subject ? `(${l.subject})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {/* Feedback Week, Start Date, End Date */}
