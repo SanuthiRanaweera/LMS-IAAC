@@ -3,7 +3,6 @@ import {
   BookOpen,
   CalendarDays,
   Files,
-  FileUp,
   LayoutDashboard,
   Users,
   UsersRound,
@@ -15,6 +14,7 @@ import {
   X,
   ClipboardCheck,
   ClipboardList,
+  LogOut,
 } from 'lucide-react';
 
 import { NavLink, useLocation } from 'react-router-dom';
@@ -26,90 +26,90 @@ import SidebarBrandHeader, {
 import logoImg from '../../image/logo.png';
 
 /* =========================================================
-   ADMIN NAVIGATION
+   GROUPED ADMIN NAVIGATION (Visual Hierarchy)
 ========================================================= */
 
-const NAV = [
+const NAV_GROUPS = [
   {
-    label: 'Dashboard',
-    to: '/admin',
-    icon: LayoutDashboard,
+    title: 'Overview',
+    items: [
+      {
+        label: 'Dashboard',
+        to: '/admin',
+        icon: LayoutDashboard,
+      },
+    ],
   },
-
   {
-    label: 'Users',
-    to: '/admin/users',
-    icon: Users,
-    superAdminOnly: true,
+    title: 'Academic Management',
+    items: [
+      {
+        label: 'Students',
+        to: '/admin/students',
+        icon: UsersRound,
+      },
+      {
+        label: 'Lecturers',
+        to: '/admin/lecturers',
+        icon: GraduationCap,
+        superAdminOnly: true,
+      },
+      {
+        label: 'Course Overview',
+        to: '/admin/course-overview',
+        icon: BookOpen,
+        superAdminOnly: true,
+      },
+      {
+        label: 'Class Schedule',
+        to: '/admin/schedule',
+        icon: CalendarDays,
+      },
+      {
+        label: 'Study Materials',
+        to: '/admin/materials/upload',
+        icon: Files,
+      },
+      {
+        label: 'Assignments',
+        to: '/admin/assignments',
+        icon: ClipboardList,
+      },
+      {
+        label: 'Results',
+        to: '/admin/results',
+        icon: ClipboardCheck,
+      },
+      {
+        label: 'Recordings',
+        to: '/admin/recordings',
+        icon: Video,
+        superAdminOnly: true,
+      },
+      {
+        label: 'Knowledge Hub',
+        to: '/admin/knowledge-hub',
+        icon: Library,
+        superAdminOnly: true,
+      },
+    ],
   },
-
   {
-    label: 'Lecturers',
-    to: '/admin/lecturers',
-    icon: GraduationCap,
-    superAdminOnly: true,
-  },
-
-  {
-    label: 'Students',
-    to: '/admin/students',
-    icon: UsersRound,
-  },
-
-  {
-    label: 'Course Overview',
-    to: '/admin/course-overview',
-    icon: BookOpen,
-    superAdminOnly: true,
-  },
-
-  {
-    label: 'Class Schedule',
-    to: '/admin/schedule',
-    icon: CalendarDays,
-  },
-
-  {
-    label: 'Study Materials',
-    to: '/admin/materials/upload',
-    icon: Files,
-  },
-
-  {
-    label: 'Assignments',
-    to: '/admin/assignments',
-    icon: ClipboardList,
-  },
-
-  /* =========================
-     NEW RESULTS MENU
-  ========================= */
-
-  {
-    label: 'Results',
-    to: '/admin/results',
-    icon: ClipboardCheck,
-  },
-
-  {
-    label: 'Recordings',
-    to: '/admin/recordings',
-    icon: Video,
-    superAdminOnly: true,
-  },
-
-  {
-    label: 'Knowledge Hub',
-    to: '/admin/knowledge-hub',
-    icon: Library,
-    superAdminOnly: true,
-  },
-
-  {
-    label: 'Feedback',
-    to: '/admin/feedback',
-    icon: MessageSquareText,
-    superAdminOnly: true,
+    title: 'Administration',
+    items: [
+      {
+        label: 'Users',
+        to: '/admin/users',
+        icon: Users,
+        superAdminOnly: true,
+      },
+      {
+        label: 'Feedback Center',
+        to: '/admin/feedback',
+        icon: MessageSquareText,
+        superAdminOnly: true,
+      },
+    ],
   },
 ];
 
@@ -117,241 +117,175 @@ const NAV = [
    ADMIN SIDEBAR
 ========================================================= */
 
-export default function AdminSidebar({ admin, dark = false }) {
+export default function AdminSidebar({ admin, onLogout, dark = false }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-
   const location = useLocation();
 
-  const role =
-    admin?.role || 'staff';
+  const role = admin?.role || 'staff';
+  const isSuperAdmin = role === 'superadmin';
 
   const activeRoleKey = normalizeUserRole(role);
   const branding = ROLE_CONFIG[activeRoleKey] || ROLE_CONFIG.admin;
 
-  /* =======================================================
-     FILTER NAVIGATION BY ROLE
-  ======================================================= */
+  const limitedRole = role === 'staff' || role === 'lecturer';
+  const adminName = admin?.name || 'Admin';
 
-  const nav = NAV.filter(
-    (item) =>
-      !item.superAdminOnly ||
-      role === 'superadmin'
-  );
+  /* Filter navigation groups based on role permissions */
+  const filteredGroups = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !item.superAdminOnly || isSuperAdmin),
+  })).filter((group) => group.items.length > 0);
 
-  const limitedRole =
-    role === 'staff' ||
-    role === 'lecturer';
-
-  /* =======================================================
-     ROLE LABEL
-  ======================================================= */
-
-  const roleLabel =
-    role === 'superadmin'
-      ? 'Super Admin'
-      : role === 'lecturer'
-        ? 'Lecturer'
-        : 'Staff Admin';
-
-  const adminName =
-    admin?.name || 'Admin';
-
-  /* =======================================================
-     ACTIVE LINK LOGIC
-  ======================================================= */
-
-  const isLinkActive = (
-    item,
-    isActive
-  ) => {
-    /*
-    Dashboard should only be active on:
-
-    /admin
-
-    and NOT:
-
-    /admin/results
-    /admin/students
-    etc.
-    */
+  /* Active link matching */
+  const isLinkActive = (item, isActive) => {
     if (item.to === '/admin') {
-      return (
-        location.pathname ===
-        '/admin'
-      );
+      return location.pathname === '/admin';
     }
-
-    /*
-    Students also has child pages,
-    so keep Students active for
-    /admin/students/...
-    */
-    if (
-      item.to ===
-      '/admin/students'
-    ) {
-      return location.pathname.startsWith(
-        '/admin/students'
-      );
+    if (item.to === '/admin/students') {
+      return location.pathname.startsWith('/admin/students');
     }
-
-    /*
-    Results may later have:
-
-    /admin/results/:id
-
-    /admin/results/edit/:id
-
-    so keep Results active for
-    all those pages.
-    */
-    if (
-      item.to ===
-      '/admin/results'
-    ) {
-      return location.pathname.startsWith(
-        '/admin/results'
-      );
+    if (item.to === '/admin/results') {
+      return location.pathname.startsWith('/admin/results');
     }
-
     return isActive;
   };
-
-  /* =======================================================
-     MOBILE MENU
-  ======================================================= */
 
   const closeMobileMenu = () => {
     setMobileOpen(false);
   };
 
   /* =======================================================
-     SIDEBAR HEADER (Dynamic Role-Based IAAC Branding)
-  ======================================================= */
-
-  const SidebarHeader = () => (
-    <SidebarBrandHeader
-      user={admin}
-      role={role}
-      displayName={adminName}
-      dark={dark}
-    />
-  );
-
-  /* =======================================================
      LIMITED ROLE NOTICE
   ======================================================= */
-
   const LimitedRoleNotice = () =>
     limitedRole ? (
-      <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-3">
-            <div className={`mb-1 text-xs font-bold ${dark ? 'text-sky-300' : 'text-blue-700'}`}>
+      <div className="mb-3 rounded-xl border border-blue-200/80 bg-blue-50/70 p-2.5">
+        <div className={`text-[11px] font-bold ${dark ? 'text-sky-300' : 'text-blue-700'}`}>
           Limited Role
         </div>
-
-        <p className={`text-[11px] leading-relaxed ${dark ? 'text-white/55' : 'text-blue-600'}`}>
-          You can manage allowed academic content,
-          schedules, assignments and student results,
-          but some administrative features are restricted.
+        <p className={`text-[10px] leading-relaxed mt-0.5 ${dark ? 'text-white/60' : 'text-blue-600'}`}>
+          Some administrative features are restricted for your role.
         </p>
       </div>
     ) : null;
 
   /* =======================================================
-     NAVIGATION LINKS
+     SIDEBAR CONTENT (Fixed Header, Scrollable Nav, Fixed Footer)
   ======================================================= */
+  const SidebarBody = ({ onNavigate }) => (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      {/* 1. FIXED HEADER */}
+      <div className="shrink-0">
+        <SidebarBrandHeader
+          user={admin}
+          role={role}
+          displayName={adminName}
+          dark={dark}
+        />
+      </div>
 
-  const SidebarLinks = ({
-    onNavigate,
-  }) => (
-    <nav className="p-3">
-      <LimitedRoleNotice />
+      {/* 2. SCROLLABLE NAVIGATION AREA */}
+      <nav
+        className="min-h-0 flex-1 overflow-y-auto px-2.5 py-2.5 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-200/80 hover:[&::-webkit-scrollbar-thumb]:bg-slate-300 dark:[&::-webkit-scrollbar-thumb]:bg-white/10"
+      >
+        <LimitedRoleNotice />
 
-      <ul className="space-y-1.5">
-        {nav.map((item) => {
-          const Icon = item.icon;
+        <div className="space-y-3.5">
+          {filteredGroups.map((group) => (
+            <div key={group.title}>
+              <p className="px-3 pt-1 pb-1.5 text-[10.5px] font-bold uppercase tracking-wider text-slate-400 select-none">
+                {group.title}
+              </p>
+              <ul className="space-y-1">
+                {group.items.map((item) => {
+                  const Icon = item.icon;
 
-          return (
-            <li key={item.to}>
-              <NavLink
-                to={item.to}
-                end={
-                  item.to ===
-                  '/admin'
-                }
-                onClick={onNavigate}
-                className={({
-                  isActive,
-                }) => {
-                  const isCurrent = isLinkActive(item, isActive);
-                  return [
-                    'group relative flex min-h-11 items-center gap-3 rounded-2xl px-3.5 py-2.5 text-sm font-semibold transition-all duration-200',
-                    isCurrent
-                      ? dark
-                        ? 'bg-sky-400/20 text-sky-300 font-bold shadow-xs'
-                        : 'bg-blue-100/70 text-[#003580] font-bold border border-blue-200/70 shadow-xs'
-                      : dark
-                        ? 'text-white/65 hover:bg-white/10 hover:text-white'
-                        : 'text-slate-600 hover:bg-white/90 hover:text-slate-950 hover:shadow-2xs',
-                  ].join(' ');
-                }}
-              >
-                {({ isActive }) => {
-                  const isCurrent = isLinkActive(item, isActive);
                   return (
-                    <>
-                      <Icon
-                        className={`h-4.5 w-4.5 shrink-0 transition-transform duration-200 group-hover:scale-105 ${
-                          isCurrent ? 'text-blue-700' : 'text-slate-500'
-                        }`}
-                      />
-                      <span className="truncate">{item.label}</span>
-                      {isCurrent && (
-                        <span
-                          className="ml-auto h-2 w-2 rounded-full bg-blue-600 shadow-xs animate-pulse"
-                          aria-hidden="true"
-                        />
-                      )}
-                    </>
+                    <li key={item.to}>
+                      <NavLink
+                        to={item.to}
+                        end={item.to === '/admin'}
+                        onClick={onNavigate}
+                        className={({ isActive }) => {
+                          const isCurrent = isLinkActive(item, isActive);
+                          return [
+                            'group flex min-h-[40px] items-center gap-3 rounded-xl px-3 py-2 text-[13.5px] font-medium transition-colors duration-150',
+                            isCurrent
+                              ? dark
+                                ? 'bg-sky-400/15 text-sky-300 font-semibold ring-1 ring-sky-400/20'
+                                : 'bg-blue-50/90 text-blue-800 font-semibold ring-1 ring-blue-100/90'
+                              : dark
+                                ? 'text-white/65 hover:bg-white/5 hover:text-white'
+                                : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900',
+                          ].join(' ');
+                        }}
+                      >
+                        {({ isActive }) => {
+                          const isCurrent = isLinkActive(item, isActive);
+                          return (
+                            <>
+                              <Icon
+                                size={19}
+                                strokeWidth={isCurrent ? 2.2 : 1.8}
+                                className={`shrink-0 transition-colors ${
+                                  isCurrent
+                                    ? dark ? 'text-sky-300' : 'text-blue-700'
+                                    : dark ? 'text-white/50 group-hover:text-white' : 'text-slate-400 group-hover:text-slate-700'
+                                }`}
+                                aria-hidden="true"
+                              />
+                              <span className="truncate">{item.label}</span>
+                            </>
+                          );
+                        }}
+                      </NavLink>
+                    </li>
                   );
-                }}
-              </NavLink>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </nav>
+
+      {/* 3. FIXED BOTTOM ACCOUNT SECTION */}
+      <div
+        className={`shrink-0 border-t p-2.5 transition-colors ${
+          dark ? 'border-white/10 bg-[#101010]/60' : 'border-slate-200/70 bg-white/40'
+        }`}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            if (onNavigate) onNavigate();
+            if (typeof onLogout === 'function') onLogout();
+          }}
+          className={`group flex w-full min-h-[40px] items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-colors cursor-pointer ${
+            dark
+              ? 'text-white/70 hover:bg-rose-500/15 hover:text-rose-300'
+              : 'text-slate-600 hover:bg-rose-50 hover:text-rose-700'
+          }`}
+          title="Sign out of IAAC Management Portal"
+        >
+          <LogOut
+            size={18}
+            strokeWidth={1.8}
+            className={`shrink-0 transition-colors ${
+              dark ? 'text-white/50 group-hover:text-rose-300' : 'text-slate-400 group-hover:text-rose-600'
+            }`}
+            aria-hidden="true"
+          />
+          <span className="truncate">Sign Out</span>
+        </button>
+      </div>
+    </div>
   );
-
-  /* =======================================================
-     REUSABLE SIDEBAR CONTENT
-  ======================================================= */
-
-  const SidebarContent = ({
-    onNavigate,
-  }) => (
-    <>
-      <SidebarHeader />
-
-      <SidebarLinks
-        onNavigate={
-          onNavigate
-        }
-      />
-    </>
-  );
-
-  /* =======================================================
-     RENDER
-  ======================================================= */
 
   return (
     <>
       {/* ===============================================
           MOBILE TOP BAR (Glassmorphism)
       =============================================== */}
-
       <div
         className={`sticky top-0 z-40 flex h-16 items-center justify-between border-b px-4 shadow-xs md:hidden ${
           dark
@@ -360,7 +294,7 @@ export default function AdminSidebar({ admin, dark = false }) {
         }`}
       >
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white p-1 border border-slate-100 shadow-2xs">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white p-1 border border-slate-100 shadow-2xs">
             <img
               src={logoImg}
               alt="IAAC College Logo"
@@ -386,9 +320,7 @@ export default function AdminSidebar({ admin, dark = false }) {
 
         <button
           type="button"
-          onClick={() =>
-            setMobileOpen(true)
-          }
+          onClick={() => setMobileOpen(true)}
           className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-xs transition-colors ${
             dark ? 'border-white/10 bg-white/5 text-white hover:bg-white/10' : 'border-slate-200/80 bg-white/80 text-slate-700 hover:bg-white'
           }`}
@@ -399,23 +331,21 @@ export default function AdminSidebar({ admin, dark = false }) {
       </div>
 
       {/* ===============================================
-          DESKTOP FLOATING GLASS SIDEBAR
+          DESKTOP FLOATING GLASS SIDEBAR (3-Section Layout)
       =============================================== */}
-
       <aside
-        className={`sticky top-4 hidden h-[calc(100vh-2rem)] w-68 shrink-0 overflow-y-auto md:my-4 md:ml-4 md:block rounded-3xl border shadow-xl shadow-slate-900/5 transition-all z-30 ${
+        className={`sticky top-4 hidden h-[calc(100vh-2rem)] w-64 shrink-0 overflow-hidden md:my-4 md:ml-4 md:flex flex-col rounded-2xl border shadow-lg shadow-slate-900/5 transition-all z-30 ${
           dark
-            ? 'border-white/10 bg-[#101010]/80 backdrop-blur-2xl'
-            : 'border-white/85 bg-white/78 backdrop-blur-2xl'
+            ? 'border-white/10 bg-[#101010]/85 backdrop-blur-xl'
+            : 'border-white/70 bg-white/82 backdrop-blur-xl'
         }`}
       >
-        <SidebarContent />
+        <SidebarBody />
       </aside>
 
       {/* ===============================================
           MOBILE DRAWER
       =============================================== */}
-
       {mobileOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
           {/* Overlay */}
@@ -423,41 +353,37 @@ export default function AdminSidebar({ admin, dark = false }) {
             type="button"
             className="absolute inset-0 bg-slate-950/40 backdrop-blur-xs"
             aria-label="Close admin menu"
-            onClick={
-              closeMobileMenu
-            }
+            onClick={closeMobileMenu}
           />
 
           {/* Drawer */}
           <aside
-            className={`absolute left-0 top-0 h-full w-72 max-w-[86vw] overflow-y-auto shadow-2xl ${
+            className={`absolute left-0 top-0 h-full w-72 max-w-[86vw] overflow-hidden flex flex-col shadow-2xl ${
               dark
                 ? 'bg-[#101010]/95 backdrop-blur-2xl border-r border-white/10'
-                : 'bg-white/90 backdrop-blur-2xl border-r border-white/80'
+                : 'bg-white/95 backdrop-blur-2xl border-r border-white/80'
             }`}
           >
-            <div className={`flex h-14 items-center justify-between border-b px-4 ${dark ? 'border-white/10' : 'border-slate-200/80'}`}>
-              <span className={`text-sm font-extrabold tracking-tight ${dark ? 'text-white' : 'text-[#003580]'}`}>
+            <div className={`flex h-14 items-center justify-between border-b px-4 shrink-0 ${dark ? 'border-white/10' : 'border-slate-200/80'}`}>
+              <span className={`text-xs font-extrabold uppercase tracking-wider ${dark ? 'text-white' : 'text-[#003580]'}`}>
                 {branding.title}
               </span>
 
               <button
                 type="button"
-                onClick={
-                  closeMobileMenu
-                }
-                className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${dark ? 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+                onClick={closeMobileMenu}
+                className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
+                  dark ? 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                }`}
                 aria-label="Close menu"
               >
-                <X className="h-5 w-5" />
+                <X className="h-4 w-4" />
               </button>
             </div>
 
-            <SidebarContent
-              onNavigate={
-                closeMobileMenu
-              }
-            />
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <SidebarBody onNavigate={closeMobileMenu} />
+            </div>
           </aside>
         </div>
       )}

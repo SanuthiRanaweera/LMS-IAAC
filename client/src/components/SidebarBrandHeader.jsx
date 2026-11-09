@@ -106,13 +106,13 @@ export default function SidebarBrandHeader({
 
   return (
     <div
-      className={`border-b px-4 py-4 transition-colors ${
+      className={`border-b px-3.5 py-3 transition-colors ${
         dark ? 'border-white/10 bg-[#101010]' : 'border-slate-200/70 bg-white/40'
       } ${className}`}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5">
         {/* Official IAAC College Logo */}
-        <div className="flex h-12 w-12 sm:h-13 sm:w-13 shrink-0 items-center justify-center rounded-xl bg-white p-1 border border-slate-100 shadow-2xs">
+        <div className="flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl bg-white p-1 border border-slate-100 shadow-2xs">
           <img
             src={resolvedLogo}
             alt="IAAC College Logo"
@@ -123,7 +123,7 @@ export default function SidebarBrandHeader({
         {/* Portal Title, User Name & Role Badge */}
         <div className="min-w-0 flex-1">
           <h1
-            className={`truncate text-sm font-extrabold tracking-tight ${
+            className={`truncate text-xs sm:text-[13px] font-extrabold tracking-tight leading-tight ${
               dark ? 'text-white' : 'text-[#003580]'
             }`}
           >
@@ -131,7 +131,7 @@ export default function SidebarBrandHeader({
           </h1>
 
           <p
-            className={`truncate text-xs font-semibold mt-0.5 ${
+            className={`truncate text-xs font-semibold mt-0.5 leading-tight ${
               dark ? 'text-white/65' : 'text-slate-600'
             }`}
             title={resolvedName}
@@ -139,9 +139,9 @@ export default function SidebarBrandHeader({
             {resolvedName}
           </p>
 
-          <div className="mt-1.5 flex items-center">
+          <div className="mt-1 flex items-center">
             <span
-              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide ${branding.badgeClass}`}
+              className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-bold tracking-wide ${branding.badgeClass}`}
             >
               {branding.label}
             </span>
