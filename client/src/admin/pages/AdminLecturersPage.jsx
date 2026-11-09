@@ -339,7 +339,7 @@ export default function AdminLecturersPage() {
               <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-2.5" />
               <input
                 type="text"
-                placeholder="Search lecturers by name or email..."
+                placeholder="Search lecturers by name, email, or Lecturer ID (e.g. IAAC-LEC-0001)..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 pl-9.5 pr-4 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:border-blue-500 outline-none"
@@ -404,7 +404,7 @@ export default function AdminLecturersPage() {
                 <table className="w-full text-left text-xs border-collapse">
                   <thead className="border-b border-slate-200 bg-slate-50/80 font-bold text-slate-700">
                     <tr>
-                      <th className="py-3 px-4">Lecturer Name</th>
+                      <th className="py-3 px-4">Lecturer Details</th>
                       <th className="py-3 px-4">Email Address</th>
                       <th className="py-3 px-4 text-center">Registration Method</th>
                       <th className="py-3 px-4 text-center">Account Status</th>
@@ -427,16 +427,23 @@ export default function AdminLecturersPage() {
                             isPending ? 'bg-amber-50/50' : ''
                           }`}
                         >
-                          {/* Name & Avatar */}
+                          {/* Name, Avatar & Lecturer ID */}
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-3">
                               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#003580] text-white font-bold text-xs shadow-2xs">
                                 {lecturer.name?.[0] || 'L'}
                               </div>
                               <div>
-                                <span className="font-bold text-slate-900 block">
-                                  {lecturer.name}
-                                </span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-slate-900 block">
+                                    {lecturer.name}
+                                  </span>
+                                  {lecturer.lecturerId && (
+                                    <span className="font-mono text-[10px] font-bold text-[#003580] bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
+                                      {lecturer.lecturerId}
+                                    </span>
+                                  )}
+                                </div>
                                 {lecturer.canUpdateResults && (
                                   <span className="text-[10px] font-semibold text-emerald-700 block">
                                     Results Management Enabled

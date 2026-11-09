@@ -96,8 +96,8 @@ export default function LecturerDashboardPage() {
             </h1>
 
             <p className="mt-2 max-w-2xl text-sm sm:text-base text-sky-100/90 leading-relaxed">
-              Welcome to your IAAC Lecturer Portal. Manage your classes, students, learning materials,
-              assignments, and examination results.
+              Welcome to your IAAC Lecturer Portal. Manage your teaching schedule, study materials,
+              and coursework assignments.
             </p>
 
             <div className="mt-4 flex flex-wrap items-center gap-2">

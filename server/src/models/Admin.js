@@ -4,6 +4,7 @@ const { Schema } = mongoose;
 
 const AdminSchema = new Schema(
   {
+    lecturerId: { type: String, trim: true, default: '', index: true, sparse: true },
     name: { type: String, required: true, trim: true, maxlength: 120 },
     email: {
       type: String,

@@ -28,6 +28,7 @@ function hashToken(rawToken) {
 function toLecturerListItem(doc) {
   return {
     id: String(doc._id),
+    lecturerId: doc.lecturerId || '',
     name: doc.name,
     email: doc.email,
     subject: doc.subject || '',
@@ -39,6 +40,7 @@ function toLecturerListItem(doc) {
 function toAdminLecturerPayload(doc) {
   return {
     id: String(doc._id),
+    lecturerId: doc.lecturerId || '',
     name: doc.name,
     email: doc.email,
     role: doc.role || 'lecturer',
@@ -252,6 +254,7 @@ export async function registerLecturerPublic(req, res, next) {
         'Lecturer account registered successfully. Your account is pending Super Admin approval before you can access the LMS.',
       lecturer: {
         id: String(lecturer._id),
+        lecturerId: lecturer.lecturerId || '',
         name: lecturer.name,
         email: lecturer.email,
         accountStatus: lecturer.accountStatus,
@@ -284,6 +287,7 @@ export async function listAdminLecturers(req, res, next) {
       query.$or = [
         { name: { $regex: q, $options: 'i' } },
         { email: { $regex: q, $options: 'i' } },
+        { lecturerId: { $regex: q, $options: 'i' } },
         { subject: { $regex: q, $options: 'i' } },
       ];
     }

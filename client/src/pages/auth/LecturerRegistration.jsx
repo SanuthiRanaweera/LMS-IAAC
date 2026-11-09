@@ -40,6 +40,7 @@ export default function LecturerRegistration() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
   const [registeredSuccess, setRegisteredSuccess] = useState(false);
+  const [registeredLecturerId, setRegisteredLecturerId] = useState('');
 
   // Validate token on mount or token change
   useEffect(() => {
@@ -109,7 +110,7 @@ export default function LecturerRegistration() {
 
     setSubmitting(true);
     try {
-      await apiPost('/api/lecturers/register', {
+      const res = await apiPost('/api/lecturers/register', {
         token,
         fullName: cleanName,
         email: cleanEmail,
@@ -117,6 +118,9 @@ export default function LecturerRegistration() {
         confirmPassword,
       });
 
+      if (res?.lecturer?.lecturerId) {
+        setRegisteredLecturerId(res.lecturer.lecturerId);
+      }
       setRegisteredSuccess(true);
     } catch (err) {
       setFormError(err?.message || 'Registration failed. Please check your information and try again.');
@@ -186,6 +190,14 @@ export default function LecturerRegistration() {
                         Pending Approval
                       </span>.
                     </p>
+                    {registeredLecturerId && (
+                      <p className="mt-2 text-xs font-semibold text-slate-700">
+                        Assigned Lecturer ID:{' '}
+                        <span className="font-mono font-bold text-[#003580] bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-md">
+                          {registeredLecturerId}
+                        </span>
+                      </p>
+                    )}
                   </div>
 
                   <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 text-left text-xs text-blue-900 space-y-1.5">

@@ -17,13 +17,51 @@ export function safeTrim(value) {
 }
 
 /**
+ * Generates a unique Lecturer ID in the standard format IAAC-LEC-0001
+ */
+export async function generateLecturerId() {
+  const lecturers = await Admin.find({
+    role: 'lecturer',
+    lecturerId: { $regex: /^IAAC-LEC-\d+$/i },
+  })
+    .select('lecturerId')
+    .lean();
+
+  let maxNum = 0;
+  for (const l of lecturers) {
+    const match = String(l.lecturerId || '').match(/IAAC-LEC-(\d+)/i);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (num > maxNum) maxNum = num;
+    }
+  }
+
+  if (maxNum === 0) {
+    const count = await Admin.countDocuments({ role: 'lecturer' });
+    maxNum = count;
+  }
+
+  let nextNum = maxNum + 1;
+  let candidate = `IAAC-LEC-${String(nextNum).padStart(4, '0')}`;
+
+  while (await Admin.exists({ lecturerId: candidate })) {
+    nextNum += 1;
+    candidate = `IAAC-LEC-${String(nextNum).padStart(4, '0')}`;
+  }
+
+  return candidate;
+}
+
+/**
  * Shared backend service to create lecturer accounts consistently
  * across Super Admin creation and self-registration link workflows.
  */
 export async function createLecturerAccount({
+  fullName,
   name,
   email,
   password,
+  lecturerId,
   registrationMethod = 'super_admin',
   accountStatus,
   branchId = '',
@@ -35,7 +73,7 @@ export async function createLecturerAccount({
   invitationId = null,
   createdBy = null,
 }) {
-  const cleanName = safeTrim(name);
+  const cleanName = safeTrim(fullName || name);
   if (!cleanName || cleanName.length < 2) {
     const err = new Error('Please enter your full name (minimum 2 characters).');
     err.statusCode = 400;
@@ -84,7 +122,13 @@ export async function createLecturerAccount({
       ? mustChangePassword
       : (registrationMethod === 'super_admin');
 
+  let finalLecturerId = safeTrim(lecturerId);
+  if (!finalLecturerId) {
+    finalLecturerId = await generateLecturerId();
+  }
+
   const createdLecturer = await Admin.create({
+    lecturerId: finalLecturerId,
     name: cleanName,
     email: cleanEmail,
     passwordHash,
