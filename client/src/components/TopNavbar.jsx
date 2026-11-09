@@ -132,17 +132,28 @@ export default function TopNavbar({
               LOGO
           ================================================= */}
 
-          <div className="flex items-center">
+          <div className="flex items-center gap-3">
             <NavLink
               to="/dashboard"
               aria-label="Go to dashboard"
               onClick={closeMenu}
+              className="flex items-center gap-3"
             >
-              <img
-                src={logo}
-                alt="IAAC Logo"
-                className="h-9 w-auto object-contain sm:h-10"
-              />
+              <div className="flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl bg-white p-1 border border-slate-100 shadow-2xs">
+                <img
+                  src={logo}
+                  alt="IAAC College Logo"
+                  className="h-full w-full object-contain"
+                />
+              </div>
+              <div className="hidden sm:block">
+                <span className="block text-sm font-extrabold text-[#003580] tracking-tight leading-none">
+                  IAAC Student Portal
+                </span>
+                <span className="block text-[10px] font-medium text-slate-500 leading-tight mt-0.5">
+                  International Airline & Aviation College
+                </span>
+              </div>
             </NavLink>
           </div>
 

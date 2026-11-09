@@ -17,6 +17,12 @@ import {
 
 import { NavLink, useLocation } from 'react-router-dom';
 
+import SidebarBrandHeader, {
+  ROLE_CONFIG,
+  normalizeUserRole,
+} from '../../components/SidebarBrandHeader.jsx';
+import logoImg from '../../image/logo.png';
+
 /* =========================================================
    ADMIN NAVIGATION
 ========================================================= */
@@ -117,6 +123,9 @@ export default function AdminSidebar({ admin, dark = false }) {
   const role =
     admin?.role || 'staff';
 
+  const activeRoleKey = normalizeUserRole(role);
+  const branding = ROLE_CONFIG[activeRoleKey] || ROLE_CONFIG.admin;
+
   /* =======================================================
      FILTER NAVIGATION BY ROLE
   ======================================================= */
@@ -216,37 +225,16 @@ export default function AdminSidebar({ admin, dark = false }) {
   };
 
   /* =======================================================
-     SIDEBAR HEADER
+     SIDEBAR HEADER (Dynamic Role-Based IAAC Branding)
   ======================================================= */
 
   const SidebarHeader = () => (
-    <div className={`border-b px-5 py-4 ${dark ? 'border-white/10' : 'border-slate-200'}`}>
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#003580] text-sm font-bold text-white shadow-sm">
-          IA
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className={`truncate text-sm font-bold ${dark ? 'text-white' : 'text-slate-900'}`}>
-            IAAC Admin
-          </div>
-
-          <div className={`truncate text-xs font-semibold ${dark ? 'text-white/45' : 'text-slate-500'}`}>
-            {adminName}
-          </div>
-        </div>
-      </div>
-
-      <div
-        className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold ${
-          role === 'superadmin'
-            ? 'bg-purple-100 text-purple-700'
-            : 'bg-blue-100 text-blue-700'
-        }`}
-      >
-        {roleLabel}
-      </div>
-    </div>
+    <SidebarBrandHeader
+      user={admin}
+      role={role}
+      displayName={adminName}
+      dark={dark}
+    />
   );
 
   /* =======================================================
@@ -347,19 +335,28 @@ export default function AdminSidebar({ admin, dark = false }) {
           MOBILE TOP BAR
       =============================================== */}
 
-      <div className={`sticky top-0 z-40 flex h-16 items-center justify-between border-b px-4 shadow-sm md:hidden ${dark ? 'border-white/10 bg-[#101010]' : 'border-slate-200 bg-white'}`}>
+      <div className={`sticky top-0 z-40 flex h-16 items-center justify-between border-b px-4 shadow-xs md:hidden ${dark ? 'border-white/10 bg-[#101010]' : 'border-slate-200 bg-white'}`}>
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#003580] text-sm font-bold text-white shadow-sm">
-            IA
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white p-1 border border-slate-100 shadow-2xs">
+            <img
+              src={logoImg}
+              alt="IAAC College Logo"
+              className="h-full w-full object-contain"
+            />
           </div>
 
           <div className="min-w-0">
-            <div className={`truncate text-sm font-bold ${dark ? 'text-white' : 'text-slate-900'}`}>
-              IAAC Admin
+            <div className={`truncate text-sm font-extrabold tracking-tight ${dark ? 'text-white' : 'text-[#003580]'}`}>
+              {branding.title}
             </div>
 
-            <div className={`truncate text-xs font-semibold ${dark ? 'text-white/45' : 'text-slate-500'}`}>
-              {adminName}
+            <div className="flex items-center gap-1.5 truncate">
+              <span className={`truncate text-xs font-semibold ${dark ? 'text-white/65' : 'text-slate-600'}`}>
+                {adminName}
+              </span>
+              <span className={`inline-flex rounded-full px-1.5 py-0.2 text-[9px] font-bold ${branding.badgeClass}`}>
+                {branding.label}
+              </span>
             </div>
           </div>
         </div>
@@ -369,8 +366,8 @@ export default function AdminSidebar({ admin, dark = false }) {
           onClick={() =>
             setMobileOpen(true)
           }
-          className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-sm transition-colors ${dark ? 'border-white/10 bg-white/5 text-white hover:bg-white/10' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
-          aria-label="Open admin menu"
+          className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-xs transition-colors ${dark ? 'border-white/10 bg-white/5 text-white hover:bg-white/10' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
+          aria-label="Open navigation menu"
         >
           <Menu className="h-5 w-5" />
         </button>
@@ -403,8 +400,8 @@ export default function AdminSidebar({ admin, dark = false }) {
           {/* Drawer */}
           <aside className={`absolute left-0 top-0 h-full w-72 max-w-[86vw] overflow-y-auto shadow-2xl ${dark ? 'bg-[#101010]' : 'bg-white'}`}>
             <div className={`flex h-14 items-center justify-between border-b px-4 ${dark ? 'border-white/10' : 'border-slate-200'}`}>
-              <span className={`text-sm font-bold ${dark ? 'text-white' : 'text-slate-900'}`}>
-                Admin Menu
+              <span className={`text-sm font-extrabold tracking-tight ${dark ? 'text-white' : 'text-[#003580]'}`}>
+                {branding.title}
               </span>
 
               <button
@@ -413,7 +410,7 @@ export default function AdminSidebar({ admin, dark = false }) {
                   closeMobileMenu
                 }
                 className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${dark ? 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
-                aria-label="Close admin menu"
+                aria-label="Close menu"
               >
                 <X className="h-5 w-5" />
               </button>

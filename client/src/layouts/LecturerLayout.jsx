@@ -162,7 +162,9 @@ export default function LecturerLayout() {
             </button>
 
             <div className="flex items-center gap-3">
-              <img src={logo} alt="IAAC Logo" className="h-9 w-auto object-contain" />
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white p-1 border border-slate-100 shadow-2xs">
+                <img src={logo} alt="IAAC College Logo" className="h-full w-full object-contain" />
+              </div>
               <div className="hidden sm:block">
                 <span className="block text-sm font-extrabold text-[#173B75] tracking-tight leading-none">
                   IAAC Lecturer Portal
@@ -240,6 +242,9 @@ export default function LecturerLayout() {
                   {lecturer?.name || 'Lecturer'}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
+                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide bg-emerald-100 text-emerald-700 border border-emerald-200/80">
+                    Lecturer
+                  </span>
                   {lecturer?.subject ? (
                     <span className="rounded-md bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700 border border-slate-200">
                       {lecturer.subject}
